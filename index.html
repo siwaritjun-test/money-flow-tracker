@@ -362,7 +362,7 @@ async function doRefresh() {
     if (n > 0) {
       render();
       const el = document.getElementById("updated");
-      el.textContent = `Updated ${new Date().toLocaleTimeString()} · ${n} tickers`;
+      el.textContent = `Updated ${fmtTimeTZ(Date.now())} · ${n} tickers`;
       el.classList.add("flash");
       setTimeout(() => el.classList.remove("flash"), 1200);
     }
@@ -594,6 +594,9 @@ const fmtM = v => {
 };
 const fmtPct = v => (v >= 0 ? "+" : "") + (v * 100).toFixed(2) + "%";
 const fmtFlow = v => (v < 0 ? "−$" : "+$") + fmtM(Math.abs(v));
+const TZ = "Asia/Bangkok"; // header timestamps pinned to GMT+7
+const fmtTimeTZ = d => new Date(d).toLocaleTimeString("en-GB", { timeZone: TZ, hour: "2-digit", minute: "2-digit", second: "2-digit" }) + " GMT+7";
+const fmtDateTimeTZ = d => new Date(d).toLocaleString("en-GB", { timeZone: TZ, day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) + " GMT+7";
 const tooltip = document.getElementById("tooltip");
 function showTip(html, ev) {
   tooltip.innerHTML = html; tooltip.style.display = "block";
@@ -628,7 +631,7 @@ function render() {
   else if (state.view === "rrg") renderRRG(g);
   else renderHistory(g);
   const ts = Math.max(...model.stats.map(s => s.lastTs));
-  document.getElementById("updated").textContent = "Last bar: " + new Date(ts).toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
+  document.getElementById("updated").textContent = "Last bar: " + new Date(ts).toLocaleDateString("en-GB", { timeZone: TZ, weekday: "short", month: "short", day: "numeric" });
 }
 
 function renderRRG(g) {
@@ -937,7 +940,7 @@ addEventListener("resize", () => render());
   badge.className = "badge " + (state.source === "sample" ? "sample" : missing ? "sample" : "live");
   if (missing) badge.title = "Some tickers failed to load — group averages are computed from the tickers shown.";
   render();
-  if (state.jsonUpdated) document.getElementById("updated").textContent = "Data updated " + new Date(state.jsonUpdated).toLocaleString();
+  if (state.jsonUpdated) document.getElementById("updated").textContent = "Data updated " + fmtDateTimeTZ(state.jsonUpdated);
   startTimer();
   if (state.jsonUpdated) doRefresh(); // top up cached data with current intraday quotes
 })();
