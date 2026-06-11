@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Asset Guide — Money Flow Tracker</title>
+<style>
+  :root {
+    --bg: #0d1117; --panel: #161b22; --panel2: #1c2128; --border: #2d333b;
+    --text: #e6edf3; --muted: #8b949e; --green: #3fb950; --red: #f85149;
+    --blue: #58a6ff; --amber: #d29922;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+  header { padding: 18px 24px; display: flex; flex-wrap: wrap; align-items: center; gap: 14px; position: sticky; top: 0; background: rgba(13,17,23,.92); backdrop-filter: blur(6px); border-bottom: 1px solid var(--border); z-index: 5; }
+  h1 { font-size: 20px; font-weight: 700; }
+  a.back { color: var(--blue); text-decoration: none; font-size: 13px; }
+  a.back:hover { text-decoration: underline; }
+  .seg { display: inline-flex; background: var(--panel); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; margin-left: auto; }
+  .seg button { background: none; border: none; color: var(--muted); padding: 7px 14px; font-size: 13px; cursor: pointer; border-right: 1px solid var(--border); }
+  .seg button:last-child { border-right: none; }
+  .seg button.active { background: var(--blue); color: #fff; font-weight: 600; }
+  main { padding: 20px 24px 40px; max-width: 1200px; margin: 0 auto; }
+  .group-title { font-size: 13px; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); margin: 26px 0 12px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 14px; }
+  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 16px; scroll-margin-top: 90px; }
+  .card.hl { border-color: var(--blue); box-shadow: 0 0 0 1px var(--blue); }
+  .card .top { display: flex; align-items: baseline; gap: 10px; margin-bottom: 2px; }
+  .tick { font-weight: 800; font-size: 16px; }
+  .card .nm { color: var(--muted); font-size: 12px; flex: 1; min-width: 0; }
+  .px { font-size: 14px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .chg { font-size: 11px; font-variant-numeric: tabular-nums; }
+  .pos { color: var(--green); } .neg { color: var(--red); }
+  .spark { width: 100%; height: 36px; margin: 8px 0 4px; }
+  dl { font-size: 12.5px; line-height: 1.55; }
+  dt { color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: .8px; margin-top: 9px; }
+  dd { margin: 1px 0 0; }
+  .chips { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 3px; }
+  .chip { background: var(--panel2); border: 1px solid var(--border); border-radius: 10px; padding: 1px 8px; font-size: 11px; white-space: nowrap; }
+  .chip b { font-weight: 600; }
+  .meta { display: flex; gap: 14px; margin-top: 10px; font-size: 11px; color: var(--muted); }
+  .ext { margin-top: 10px; font-size: 12px; }
+  .ext a { color: var(--blue); text-decoration: none; }
+  .ext a:hover { text-decoration: underline; }
+  footer { padding: 0 24px 30px; font-size: 11px; color: var(--muted); max-width: 1200px; margin: 0 auto; line-height: 1.6; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Asset Guide</h1>
+  <a class="back" href="index.html">&larr; Back to Flow Tracker</a>
+  <div class="seg" id="filter-seg">
+    <button data-f="all" class="active">All</button>
+    <button data-f="cross">Cross-Asset</button>
+    <button data-f="sectors">US Sectors</button>
+    <button data-f="bonds">Bonds &amp; Credit</button>
+  </div>
+</header>
+<main id="main"></main>
+<footer>
+  Holdings, weights and expense ratios are approximate (mid-2026) and drift over time — use the Yahoo link on each card for current figures. Sparklines show ~1 year of daily closes, fetched live. Educational reference, not investment advice.
+</footer>
+
+<script>
+/* ============ asset knowledge base ============ */
+const INFO = {
+  /* ---------- cross-asset ---------- */
+  "SPY": { g:"cross", name:"SPDR S&P 500 ETF Trust", issuer:"State Street (SPDR)", er:"0.09%",
+    tracks:"S&P 500 — the 500 largest US public companies, market-cap weighted.",
+    inside:"One share = a slice of corporate America: ~30% technology, plus financials, health care, consumer, industrials and energy. The oldest (1993) and most heavily traded ETF in the world.",
+    top:["Apple","Microsoft","NVIDIA","Amazon","Meta","Alphabet"],
+    flow:"The baseline 'risk-on US equity' bucket. Money entering SPY = broad confidence in US large caps; money leaving usually rotates to bonds, gold or overseas." },
+  "QQQ": { g:"cross", name:"Invesco QQQ Trust", issuer:"Invesco", er:"0.20%",
+    tracks:"Nasdaq-100 — the 100 largest non-financial companies listed on Nasdaq.",
+    inside:"Heavily concentrated growth/tech: roughly 60% information technology plus communication and consumer names. No banks by rule.",
+    top:["NVIDIA","Apple","Microsoft","Broadcom","Amazon","Meta"],
+    flow:"The growth/momentum end of the equity spectrum. QQQ outperforming SPY = appetite for duration-sensitive growth; lagging = rotation to value/defensives." },
+  "IWM": { g:"cross", name:"iShares Russell 2000 ETF", issuer:"BlackRock (iShares)", er:"0.19%",
+    tracks:"Russell 2000 — companies ranked roughly #1,001–3,000 in the US by market cap.",
+    inside:"≈2,000 small-cap stocks, median market cap around $1B. No mega-cap concentration: biggest weights are financials (regional banks), industrials, health care (incl. biotech) and real estate. Top holding is typically well under 1% of the fund.",
+    top:["regional banks","biotech","industrial niche leaders","consumer small caps"],
+    flow:"Small caps are domestically focused and credit-sensitive, so IWM inflows signal risk appetite + faith in the US domestic economy; outflows often precede defensive turns." },
+  "EFA": { g:"cross", name:"iShares MSCI EAFE ETF", issuer:"BlackRock (iShares)", er:"0.33%",
+    tracks:"MSCI EAFE — developed markets outside North America (Europe, Australasia, Far East).",
+    inside:"≈700 large/mid caps from Japan (~22%), UK, France, Switzerland, Germany and Australia. Financials, industrials and health care lead; think global champions priced in foreign currencies.",
+    top:["ASML","SAP","Novo Nordisk","Nestlé","Toyota","HSBC"],
+    flow:"Money moving SPY→EFA = a bet on international catch-up and/or a weaker dollar; the reverse = US exceptionalism trade." },
+  "EEM": { g:"cross", name:"iShares MSCI Emerging Markets ETF", issuer:"BlackRock (iShares)", er:"0.70%",
+    tracks:"MSCI Emerging Markets index.",
+    inside:"≈1,200 stocks led by China, India, Taiwan, South Korea and Brazil. Tech hardware (TSMC, Samsung) and Chinese internet platforms dominate the top.",
+    top:["TSMC","Tencent","Samsung","Alibaba","Reliance"],
+    flow:"The highest-beta equity sleeve. EEM inflows ride global liquidity and a soft dollar; outflows are an early risk-off tell." },
+  "AGG": { g:"cross", name:"iShares Core US Aggregate Bond ETF", issuer:"BlackRock (iShares)", er:"0.03%",
+    tracks:"Bloomberg US Aggregate — the entire US investment-grade bond market.",
+    inside:"≈12,000 bonds: roughly 40% US Treasuries, ~27% mortgage-backed securities, ~25% corporates. Duration ≈ 6 years — the 'total bond market' in one ticker.",
+    top:["US Treasuries","agency MBS","IG corporates"],
+    flow:"The classic stocks↔bonds rotation counterpart. Equity outflows landing in AGG = defensive de-risking rather than panic." },
+  "GLD": { g:"cross", name:"SPDR Gold Shares", issuer:"State Street (SPDR)", er:"0.40%",
+    tracks:"Spot gold price.",
+    inside:"Physical gold bullion held in allocated London vaults — no stocks, no futures. Each share represents a fractional ounce of gold.",
+    top:["gold bars (100%)"],
+    flow:"The fear-and-inflation hedge. Simultaneous GLD + bond inflows = growth scare; GLD up with yields up = inflation/debasement hedge." },
+  "USO": { g:"cross", name:"United States Oil Fund", issuer:"USCF", er:"~0.8%",
+    tracks:"Front-month WTI crude-oil futures (NYMEX), rolled monthly.",
+    inside:"Futures contracts, not barrels — so long-term returns can lag spot oil when the curve is in contango (roll cost). Best read as a short-term oil-price proxy.",
+    top:["WTI crude futures"],
+    flow:"Inflows = energy/inflation bets or supply-shock hedging. Watch USO together with XLE: futures money vs equity money chasing the same theme." },
+  "UUP": { g:"cross", name:"Invesco DB US Dollar Index Bullish Fund", issuer:"Invesco", er:"~0.77%",
+    tracks:"US Dollar Index (USDX) futures.",
+    inside:"Long USD against a fixed basket: euro 57.6%, yen 13.6%, pound 11.9%, plus CAD, SEK, CHF.",
+    top:["USDX futures"],
+    flow:"The dollar is the seesaw under everything: UUP inflows pressure gold, EM and commodities; outflows grease global risk appetite." },
+  "BTC-USD": { g:"cross", name:"Bitcoin (spot, USD)", issuer:"— (decentralized network)", er:"—",
+    tracks:"Yahoo Finance composite spot price of bitcoin.",
+    inside:"Not a fund — the asset itself. ~21M max supply, trades 24/7/365 globally (so its bars include weekends, unlike everything else here).",
+    top:["BTC"],
+    flow:"Pure liquidity-and-risk-appetite gauge. Leads other risk assets at turns; correlation with QQQ rises when macro dominates, falls when crypto-specific news dominates." },
+
+  /* ---------- US sectors (Select Sector SPDRs: cap-weighted slices of the S&P 500, State Street, ER ≈0.08%) ---------- */
+  "XLK": { g:"sectors", name:"Technology Select Sector SPDR", issuer:"State Street (SPDR)", er:"0.08%",
+    tracks:"S&P 500 technology sector (~73 stocks).",
+    inside:"Semiconductors, software and hardware. Highly top-heavy: NVIDIA ~13%, Apple ~12%, Microsoft ~8.5%, then Micron, Broadcom, AMD. Note: Alphabet/Meta sit in XLC and Amazon in XLY — 'tech' by GICS is narrower than people assume.",
+    top:["NVIDIA ~13%","Apple ~12%","Microsoft ~8.5%","Micron","Broadcom","AMD"],
+    flow:"The market's growth engine. XLK leadership = risk-on momentum; money leaving XLK for XLP/XLU is the classic defensive rotation." },
+  "XLF": { g:"sectors", name:"Financial Select Sector SPDR", issuer:"State Street (SPDR)", er:"0.08%",
+    tracks:"S&P 500 financials sector.",
+    inside:"Banks, insurers, capital markets, and the payment networks (Visa/Mastercard joined in the 2023 GICS reshuffle). Berkshire Hathaway and JPMorgan anchor the top.",
+    top:["Berkshire Hathaway","JPMorgan","Visa","Mastercard","BofA","Goldman"],
+    flow:"Rate-curve and credit-cycle play: steeper curve + healthy credit = XLF inflows. A value-rotation bellwether." },
+  "XLV": { g:"sectors", name:"Health Care Select Sector SPDR", issuer:"State Street (SPDR)", er:"0.08%",
+    tracks:"S&P 500 health care sector.",
+    inside:"Pharma (Lilly, J&J, Merck), insurers (UnitedHealth), devices (Abbott, Medtronic) and biotech.",
+    top:["Eli Lilly","UnitedHealth","Johnson & Johnson","AbbVie","Merck"],
+    flow:"Defensive growth — earns in any economy. XLV inflows alongside XLP/XLU = the market bracing; alone, often a policy/innovation story." },
+  "XLE": { g:"sectors", name:"Energy Select Sector SPDR", issuer:"State Street (SPDR)", er:"0.08%",
+    tracks:"S&P 500 energy sector (~23 stocks).",
+    inside:"Oil & gas producers, refiners and service firms. Extremely concentrated: ExxonMobil + Chevron ≈ 40% of the fund.",
+    top:["ExxonMobil","Chevron","ConocoPhillips","EOG","Schlumberger"],
+    flow:"Inflation/commodity rotation. XLE leading + TIP inflows = inflation trade; XLE bleeding while XLK leads = disinflation regime." },
+  "XLI": { g:"sectors", name:"Industrial Select Sector SPDR", issuer:"State Street (SPDR)", er:"0.08%",
+    tracks:"S&P 500 industrials sector.",
+    inside:"Aerospace & defense (GE Aerospace, RTX), machinery (Caterpillar, Deere), rails (Union Pacific), airlines, and Uber (moved in under GICS ground transportation).",
+    top:["GE Aerospace","Caterpillar","RTX","Uber","Honeywell","Deere"],
+    flow:"The real-economy cyclical. XLI + XLB inflows together = global growth/capex optimism; defense names give it a geopolitical bid too." },
+  "XLP": { g:"sectors", name:"Consumer Staples Select Sector SPDR", issuer:"State Street (SPDR)", er:"0.08%",
+    tracks:"S&P 500 consumer staples sector.",
+    inside:"Food, beverages, household and personal products plus big-box staples retail: P&G, Costco, Walmart, Coca-Cola, PepsiCo.",
+    top:["Procter & Gamble","Costco","Walmart","Coca-Cola","PepsiCo"],
+    flow:"The purest defensive sleeve. Persistent XLP inflows while XLY bleeds = household stress / recession positioning." },
+  "XLY": { g:"sectors", name:"Consumer Discretionary Select Sector SPDR", issuer:"State Street (SPDR)", er:"0.08%",
+    tracks:"S&P 500 consumer discretionary sector.",
+    inside:"Two giants — Amazon (~20%+) and Tesla — atop retail (Home Depot), restaurants (McDonald's), travel and autos.",
+    top:["Amazon ~20%","Tesla","Home Depot","McDonald's","Booking"],
+    flow:"Consumer confidence in ETF form. XLY/XLP ratio rising = healthy consumer risk appetite; falling = belt-tightening." },
+  "XLU": { g:"sectors", name:"Utilities Select Sector SPDR", issuer:"State Street (SPDR)", er:"0.08%",
+    tracks:"S&P 500 utilities sector.",
+    inside:"Regulated electric & gas utilities and power producers: NextEra, Southern, Duke, Constellation. Bond-like cash flows, plus an AI-datacenter electricity-demand kicker in recent years.",
+    top:["NextEra","Constellation","Southern","Duke"],
+    flow:"Two faces: classic rate-sensitive defensive (trades with TLT), and growth-by-proxy when the power-demand theme is hot — check which regime you're in before reading the flow." },
+  "XLB": { g:"sectors", name:"Materials Select Sector SPDR", issuer:"State Street (SPDR)", er:"0.08%",
+    tracks:"S&P 500 materials sector (~28 stocks — the smallest sector).",
+    inside:"Industrial gases (Linde), chemicals (Sherwin-Williams, Dow), copper & gold miners (Freeport, Newmont), packaging.",
+    top:["Linde","Sherwin-Williams","Freeport-McMoRan","Newmont"],
+    flow:"Upstream commodity cyclical — often the first sector to move on a China/global-manufacturing impulse." },
+  "XLRE": { g:"sectors", name:"Real Estate Select Sector SPDR", issuer:"State Street (SPDR)", er:"0.08%",
+    tracks:"S&P 500 real estate sector.",
+    inside:"REITs: industrial/logistics (Prologis), cell towers (American Tower), datacenters (Equinix, Digital Realty), plus retail and residential.",
+    top:["Prologis","American Tower","Equinix","Welltower"],
+    flow:"Leveraged duration play — moves with TLT but with equity beta. XLRE inflows usually need falling-yield conviction." },
+  "XLC": { g:"sectors", name:"Communication Services Select Sector SPDR", issuer:"State Street (SPDR)", er:"0.08%",
+    tracks:"S&P 500 communication services sector.",
+    inside:"Meta + Alphabet ≈ 40% combined, then Netflix, Disney, gaming (EA, Take-Two) and telecom (AT&T, Verizon, T-Mobile). A barbell of mega-cap internet and slow telcos.",
+    top:["Meta","Alphabet","Netflix","Disney","T-Mobile"],
+    flow:"Mostly an internet-platform proxy; read XLC alongside XLK to separate 'AI/mega-cap' flow from broad tech flow." },
+
+  /* ---------- bonds & credit ---------- */
+  "BIL": { g:"bonds", name:"SPDR Bloomberg 1-3 Month T-Bill ETF", issuer:"State Street (SPDR)", er:"0.14%",
+    tracks:"1–3 month US Treasury bills.",
+    inside:"The closest thing to cash in ETF form: near-zero duration, near-zero credit risk, yield ≈ the Fed's policy rate.",
+    top:["1-3m T-bills"],
+    flow:"The hideout. Money pouring into BIL = de-risking into cash without leaving the market; leaving BIL = cash being redeployed (watch where it shows up)." },
+  "SHY": { g:"bonds", name:"iShares 1-3 Year Treasury Bond ETF", issuer:"BlackRock (iShares)", er:"0.15%",
+    tracks:"US Treasuries maturing in 1–3 years.",
+    inside:"Short-duration government bonds, duration ≈ 1.9y. Price moves mostly on Fed-policy expectations, not long-run growth views.",
+    top:["1-3y Treasuries"],
+    flow:"SHY inflows = rate-cut positioning or mild caution. SHY→TLT migration = conviction that yields have peaked (duration grab)." },
+  "IEF": { g:"bonds", name:"iShares 7-10 Year Treasury Bond ETF", issuer:"BlackRock (iShares)", er:"0.15%",
+    tracks:"US Treasuries maturing in 7–10 years.",
+    inside:"The belly of the curve, duration ≈ 7.5y. Benchmark-ish exposure: sensitive to both Fed path and term premium.",
+    top:["7-10y Treasuries"],
+    flow:"The moderate duration bet. IEF gathering flows while SHY and TLT don't = positioning for a soft landing, not a crash." },
+  "TLT": { g:"bonds", name:"iShares 20+ Year Treasury Bond ETF", issuer:"BlackRock (iShares)", er:"0.15%",
+    tracks:"US Treasuries maturing in 20+ years.",
+    inside:"The longest, most rate-sensitive Treasury sleeve: duration ≈ 16y, so a 1pp fall in long yields ≈ +16% price move (and vice versa). Trades like a high-octane macro instrument.",
+    top:["20-30y Treasuries"],
+    flow:"The purest growth-scare / disinflation trade. TLT inflows + equity outflows = recession positioning; TLT outflows with stocks up = reflation / term-premium worry." },
+  "TIP": { g:"bonds", name:"iShares TIPS Bond ETF", issuer:"BlackRock (iShares)", er:"0.19%",
+    tracks:"US Treasury Inflation-Protected Securities.",
+    inside:"Treasuries whose principal is indexed to CPI — you earn a 'real' yield plus realized inflation. Duration ≈ 6.5y.",
+    top:["TIPS, all maturities"],
+    flow:"Read TIP against IEF: TIP gaining on nominal Treasuries = inflation-expectations bid; both gaining = pure duration/growth-fear bid." },
+  "LQD": { g:"bonds", name:"iShares iBoxx $ Investment Grade Corporate Bond ETF", issuer:"BlackRock (iShares)", er:"0.14%",
+    tracks:"USD investment-grade corporate bonds.",
+    inside:"≈2,800 bonds from blue-chip issuers (banks, tech, health care, energy). Duration ≈ 8y — so it carries both credit spread risk and meaningful rate risk.",
+    top:["bank, tech & healthcare IG bonds"],
+    flow:"Quality-credit gauge. LQD beating Treasuries = spread compression / corporate confidence; lagging = credit caution even before high yield cracks." },
+  "HYG": { g:"bonds", name:"iShares iBoxx $ High Yield Corporate Bond ETF", issuer:"BlackRock (iShares)", er:"0.49%",
+    tracks:"USD high-yield ('junk') corporate bonds.",
+    inside:"≈1,200 below-investment-grade bonds (mostly BB/B). Short duration (~3y) — its price action is about credit risk, not rates.",
+    top:["BB/B corporate bonds"],
+    flow:"The canary. HYG inflows = genuine risk-on (investors reaching for yield); HYG cracking while stocks hold = divergence that often resolves downward for equities." },
+  "EMB": { g:"bonds", name:"iShares J.P. Morgan USD Emerging Markets Bond ETF", issuer:"BlackRock (iShares)", er:"0.39%",
+    tracks:"USD-denominated emerging-market sovereign debt.",
+    inside:"Government bonds of ~30+ countries — Mexico, Saudi Arabia, Turkey, Brazil, Indonesia — issued in dollars (no local-FX risk, but full credit risk).",
+    top:["Mexico","Saudi Arabia","Turkey","Brazil","Indonesia"],
+    flow:"Global risk appetite + dollar gauge. EMB and EEM flowing together = broad EM bid; EMB outflows on a UUP surge = dollar squeeze on the periphery." },
+};
+
+const GROUP_TITLES = { cross: "Cross-Asset", sectors: "US Sectors — Select Sector SPDRs (cap-weighted slices of the S&P 500)", bonds: "Bonds & Credit" };
+const PROXIES = [
+  u => u,
+  u => "https://api.allorigins.win/raw?url=" + encodeURIComponent(u),
+  u => "https://corsproxy.io/?url=" + encodeURIComponent(u),
+  u => "https://api.codetabs.com/v1/proxy?quest=" + encodeURIComponent(u),
+];
+
+/* ============ render cards ============ */
+function card(t, a) {
+  const yurl = "https://finance.yahoo.com/quote/" + encodeURIComponent(t) + "/";
+  return `<div class="card" id="${t}" data-g="${a.g}">
+    <div class="top"><span class="tick">${t}</span><span class="nm">${a.name}</span><span class="px" id="px-${t}"></span><span class="chg" id="chg-${t}"></span></div>
+    <svg class="spark" id="spark-${t}" preserveAspectRatio="none"></svg>
+    <dl>
+      <dt>Tracks</dt><dd>${a.tracks}</dd>
+      <dt>What's inside</dt><dd>${a.inside}</dd>
+      <dt>Representative holdings</dt><dd><div class="chips">${a.top.map(h => `<span class="chip">${h}</span>`).join("")}</div></dd>
+      <dt>How to read its flows</dt><dd>${a.flow}</dd>
+    </dl>
+    <div class="meta"><span>Issuer: ${a.issuer}</span><span>Expense ratio: ${a.er}</span></div>
+    <div class="ext"><a href="${yurl}" target="_blank" rel="noopener">Current holdings & quote on Yahoo Finance &rarr;</a></div>
+  </div>`;
+}
+
+function renderAll() {
+  const main = document.getElementById("main");
+  let html = "";
+  for (const g of ["cross", "sectors", "bonds"]) {
+    html += `<div class="group-title" data-g="${g}">${GROUP_TITLES[g]}</div><div class="grid" data-g="${g}">`;
+    for (const [t, a] of Object.entries(INFO)) if (a.g === g) html += card(t, a);
+    html += "</div>";
+  }
+  main.innerHTML = html;
+}
+
+function applyFilter(f) {
+  document.querySelectorAll("[data-g]").forEach(el => {
+    if (el.classList.contains("card")) return; // cards hide via parent grids
+    el.style.display = (f === "all" || el.dataset.g === f) ? "" : "none";
+  });
+}
+
+/* ============ live sparklines (single batched request) ============ */
+async function loadSparks() {
+  const symbols = Object.keys(INFO);
+  // 1) prefer data.json committed by the GitHub Action (same-origin, ~6 months)
+  try {
+    const r = await fetch("data.json?t=" + Date.now(), { signal: AbortSignal.timeout(8000) });
+    if (r.ok) {
+      const j = await r.json();
+      let drawn = 0;
+      for (const t of symbols) {
+        const rows = j?.series?.[t];
+        if (Array.isArray(rows) && rows.length > 10 && drawSpark(t, rows.map(x => x[1]))) drawn++;
+      }
+      if (drawn >= symbols.length * 0.6) return;
+    }
+  } catch (e) { /* not hosted with data.json */ }
+  // 2) live batched spark via proxies (1 year)
+  const base = `https://query1.finance.yahoo.com/v8/finance/spark?symbols=${encodeURIComponent(symbols.join(","))}&range=1y&interval=1d`;
+  for (const wrap of PROXIES) {
+    try {
+      const r = await fetch(wrap(base), { signal: AbortSignal.timeout(15000) });
+      if (!r.ok) continue;
+      const j = await r.json();
+      const arr = Array.isArray(j) ? j : (j?.spark?.result || j?.result);
+      if (!arr || !arr.length) continue;
+      let drawn = 0;
+      for (const item of arr) {
+        const res = item.response?.[0] ?? item;
+        const sym = item.symbol || res?.meta?.symbol;
+        const closes = (res?.indicators?.quote?.[0]?.close || []).filter(v => v != null);
+        if (sym && closes.length > 10 && drawSpark(sym, closes)) drawn++;
+      }
+      if (drawn) return;
+    } catch (e) {}
+  }
+  // fallback: per-ticker (sequential-ish, 4 workers) so the page still fills in
+  let idx = 0;
+  async function worker() {
+    while (idx < symbols.length) {
+      const t = symbols[idx++];
+      const u = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(t)}?range=1y&interval=1d`;
+      for (const wrap of PROXIES) {
+        try {
+          const r = await fetch(wrap(u), { signal: AbortSignal.timeout(10000) });
+          if (!r.ok) continue;
+          const res = (await r.json())?.chart?.result?.[0];
+          const closes = (res?.indicators?.quote?.[0]?.close || []).filter(v => v != null);
+          if (closes.length > 10) { drawSpark(t, closes); break; }
+        } catch (e) {}
+      }
+    }
+  }
+  await Promise.all([worker(), worker(), worker(), worker()]);
+}
+
+function drawSpark(t, closes) {
+  const svg = document.getElementById("spark-" + t);
+  if (!svg) return false;
+  const W = 320, H = 36;
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  const min = Math.min(...closes), max = Math.max(...closes), span = (max - min) || 1;
+  const pts = closes.map((v, i) => `${(i / (closes.length - 1) * W).toFixed(1)},${(H - 3 - (v - min) / span * (H - 6)).toFixed(1)}`).join(" ");
+  const up = closes[closes.length - 1] >= closes[0];
+  const col = up ? "var(--green)" : "var(--red)";
+  svg.innerHTML = `<polyline points="${pts}" fill="none" stroke="${col}" stroke-width="1.4" opacity="0.9"/>`;
+  const last = closes[closes.length - 1], ret = last / closes[0] - 1;
+  const px = document.getElementById("px-" + t), chg = document.getElementById("chg-" + t);
+  if (px) px.textContent = last >= 1000 ? last.toLocaleString(undefined, { maximumFractionDigits: 0 }) : last.toFixed(2);
+  const span = closes.length > 200 ? "1y" : "6m"; // data.json carries ~6 months, spark carries 1y
+  if (chg) { chg.textContent = (ret >= 0 ? "+" : "") + (ret * 100).toFixed(1) + "% " + span; chg.className = "chg " + (ret >= 0 ? "pos" : "neg"); }
+  return true;
+}
+
+/* ============ wiring ============ */
+renderAll();
+document.getElementById("filter-seg").addEventListener("click", e => {
+  if (!e.target.dataset.f) return;
+  document.querySelectorAll("#filter-seg button").forEach(b => b.classList.toggle("active", b === e.target));
+  applyFilter(e.target.dataset.f);
+});
+// deep link: assets.html#XLK scrolls to + highlights the card
+if (location.hash) {
+  const el = document.getElementById(decodeURIComponent(location.hash.slice(1)));
+  if (el) { el.classList.add("hl"); setTimeout(() => el.scrollIntoView({ behavior: "smooth", block: "center" }), 100); }
+}
+loadSparks();
+</script>
+</body>
+</html>
