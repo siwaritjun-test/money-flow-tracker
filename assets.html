@@ -327,8 +327,8 @@ function drawSpark(t, closes) {
   const last = closes[closes.length - 1], ret = last / closes[0] - 1;
   const px = document.getElementById("px-" + t), chg = document.getElementById("chg-" + t);
   if (px) px.textContent = last >= 1000 ? last.toLocaleString(undefined, { maximumFractionDigits: 0 }) : last.toFixed(2);
-  const span = closes.length > 200 ? "1y" : "6m"; // data.json carries ~6 months, spark carries 1y
-  if (chg) { chg.textContent = (ret >= 0 ? "+" : "") + (ret * 100).toFixed(1) + "% " + span; chg.className = "chg " + (ret >= 0 ? "pos" : "neg"); }
+  const spanLbl = closes.length > 200 ? "1y" : "6m"; // data.json carries ~6 months, spark carries 1y
+  if (chg) { chg.textContent = (ret >= 0 ? "+" : "") + (ret * 100).toFixed(1) + "% " + spanLbl; chg.className = "chg " + (ret >= 0 ? "pos" : "neg"); }
   return true;
 }
 
