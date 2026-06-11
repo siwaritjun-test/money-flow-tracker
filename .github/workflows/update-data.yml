@@ -1,0 +1,40 @@
+name: Update market data
+
+on:
+  schedule:
+    # every 2 hours on weekdays (covers US market hours), once on Saturday for crypto
+    - cron: "17 */2 * * 1-5"
+    - cron: "17 12 * * 6"
+  workflow_dispatch: {}   # allows manual "Run workflow" button
+
+permissions:
+  contents: write
+
+concurrency:
+  group: update-data
+  cancel-in-progress: true
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Fetch market data
+        run: node scripts/fetch_data.js
+
+      - name: Commit if changed
+        run: |
+          git config user.name "data-bot"
+          git config user.email "actions@github.com"
+          git add data.json archive.json
+          if git diff --cached --quiet; then
+            echo "No changes."
+          else
+            git commit -m "data: update $(date -u +'%Y-%m-%d %H:%M UTC')"
+            git push
+          fi
