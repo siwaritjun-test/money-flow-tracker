@@ -306,30 +306,69 @@ function applyQuote(sym, price, vol, ts) {
   return true;
 }
 
+/* Same-origin re-check of data.json — the most reliable refresh source on GitHub
+   Pages (the Action updates it every 2h; no CORS proxies involved). */
+async function reloadDataJson() {
+  try {
+    const r = await fetch("data.json?t=" + Date.now(), { signal: AbortSignal.timeout(8000) });
+    if (!r.ok) return false;
+    const j = await r.json();
+    if (!j?.series || !j.updated) return false;
+    if (state.jsonUpdated && Date.parse(j.updated) <= Date.parse(state.jsonUpdated)) return false; // nothing newer
+    let n = 0;
+    for (const [t, rows] of Object.entries(j.series)) {
+      if (Array.isArray(rows) && rows.length > 25) {
+        state.data[t] = rows.map(([ts, close, vol, adj]) => ({ ts, close, vol, adj: adj > 0 ? adj : close }));
+        n++;
+      }
+    }
+    if (n) { state.jsonUpdated = j.updated; state.loaded = n; return true; }
+  } catch (e) { /* not hosted with data.json */ }
+  return false;
+}
+
+/* Yahoo spark: returns a flat object keyed by symbol ({SPY: {timestamp:[...], close:[...]}}).
+   Large symbol lists get HTTP 400, so request in chunks. Legacy array/result shapes kept as fallback. */
+async function refreshSpark(tickers) {
+  let updated = 0;
+  const CHUNK = 20;
+  for (let off = 0; off < tickers.length; off += CHUNK) {
+    const batch = tickers.slice(off, off + CHUNK);
+    const base = `https://query1.finance.yahoo.com/v8/finance/spark?symbols=${encodeURIComponent(batch.join(","))}&range=1d&interval=1d`;
+    for (const wrap of PROXIES) {
+      try {
+        const r = await fetch(wrap(base), { signal: AbortSignal.timeout(10000) });
+        if (!r.ok) continue;
+        const j = await r.json();
+        const items = Array.isArray(j) ? j
+          : (j?.spark?.result || j?.result || (j && typeof j === "object" ? Object.values(j) : null));
+        if (!items || !items.length) continue;
+        let got = 0;
+        for (const item of items) {
+          if (!item || typeof item !== "object") continue;
+          const res = item.response?.[0] ?? item;
+          const meta = res?.meta || {};
+          const sym = item.symbol || meta.symbol || res?.symbol;
+          const closes = (Array.isArray(res?.close) ? res.close : res?.indicators?.quote?.[0]?.close || []).filter(v => v != null);
+          const price = meta.regularMarketPrice ?? (closes.length ? closes[closes.length - 1] : null);
+          const vol = meta.regularMarketVolume ?? res?.indicators?.quote?.[0]?.volume?.slice(-1)[0] ?? null;
+          const tsArr = res?.timestamp;
+          const ts = meta.regularMarketTime ? meta.regularMarketTime * 1000
+            : (Array.isArray(tsArr) && tsArr.length ? tsArr[tsArr.length - 1] * 1000 : Date.now());
+          if (applyQuote(sym, price, vol, ts)) got++;
+        }
+        if (got) { updated += got; break; } // this chunk done — move to the next
+      } catch (e) { /* try next proxy */ }
+    }
+  }
+  return updated;
+}
+
 async function refreshQuotes() {
   const tickers = allTickers().filter(t => state.data[t]);
-  // 1) try one batched spark request for everything
-  const base = `https://query1.finance.yahoo.com/v8/finance/spark?symbols=${encodeURIComponent(tickers.join(","))}&range=1d&interval=1d`;
-  for (const wrap of PROXIES) {
-    try {
-      const r = await fetch(wrap(base), { signal: AbortSignal.timeout(10000) });
-      if (!r.ok) continue;
-      const j = await r.json();
-      const arr = Array.isArray(j) ? j : (j?.spark?.result || j?.result);
-      if (!arr || !arr.length) continue;
-      let updated = 0;
-      for (const item of arr) {
-        const res = item.response?.[0] ?? item;
-        const meta = res?.meta || {};
-        const sym = item.symbol || meta.symbol;
-        const price = meta.regularMarketPrice ?? res?.indicators?.quote?.[0]?.close?.slice(-1)[0];
-        const vol = meta.regularMarketVolume ?? res?.indicators?.quote?.[0]?.volume?.slice(-1)[0];
-        const ts = meta.regularMarketTime ? meta.regularMarketTime * 1000 : Date.now();
-        if (applyQuote(sym, price, vol, ts)) updated++;
-      }
-      if (updated) return updated;
-    } catch (e) { /* try next proxy */ }
-  }
+  // 1) batched spark requests (chunked)
+  const updatedSpark = await refreshSpark(tickers);
+  if (updatedSpark) return updatedSpark;
   // 2) fallback: light per-ticker chart (current group only, max 4 in flight)
   const groupTickers = GROUPS[state.group].assets.map(a => a.t).filter(t => state.data[t]);
   let updated = 0, idx = 0;
@@ -358,13 +397,16 @@ async function doRefresh() {
   const btn = document.getElementById("refresh-now");
   btn.classList.add("busy");
   try {
+    const fresh = state.jsonUpdated ? await reloadDataJson() : false; // same-origin, most reliable
     const n = await refreshQuotes();
-    if (n > 0) {
+    const el = document.getElementById("updated");
+    if (n > 0 || fresh) {
       render();
-      const el = document.getElementById("updated");
-      el.textContent = `Updated ${fmtTimeTZ(Date.now())} · ${n} tickers`;
+      el.textContent = n > 0 ? `Updated ${fmtTimeTZ(Date.now())} · ${n} tickers` : `Data updated ${fmtDateTimeTZ(state.jsonUpdated)}`;
       el.classList.add("flash");
       setTimeout(() => el.classList.remove("flash"), 1200);
+    } else {
+      el.textContent = `Checked ${fmtTimeTZ(Date.now())} · no new quotes`;
     }
   } finally {
     refreshing = false;
