@@ -19,6 +19,10 @@ const TICKERS = [
   "XLK", "XLF", "XLV", "XLE", "XLI", "XLP", "XLY", "XLU", "XLB", "XLRE", "XLC",
   // bonds & credit
   "BIL", "SHY", "IEF", "TLT", "TIP", "LQD", "HYG", "EMB",
+  // factors / style
+  "IWF", "IWD", "MTUM", "QUAL", "USMV", "SPHB", "SPLV", "RSP", "SMH",
+  // regime gauges (indices & futures — volume may be 0, used for ratios/levels only)
+  "^VIX", "^TNX", "^IRX", "GC=F", "HG=F",
 ];
 
 const ROOT = path.join(__dirname, "..");
@@ -46,8 +50,9 @@ async function fetchTicker(t, attempt = 1) {
     }
     const rows = [...byDay.values()].sort((x, y) => x[0] - y[0]);
     if (rows.length < 25) throw new Error("too few rows: " + rows.length);
-    // sanity: flag absurd one-day moves (bad ticks) on non-crypto tickers
-    if (!t.includes("-USD")) {
+    // sanity: flag absurd one-day moves (bad ticks). Crypto and indices exempt —
+    // VIX legitimately spikes >35%/day, and low short-term yields (^IRX) move hugely in % terms.
+    if (!t.includes("-USD") && !t.startsWith("^")) {
       for (let i = 1; i < rows.length; i++) {
         const chg = rows[i][3] / rows[i - 1][3] - 1;
         if (Math.abs(chg) > 0.35) throw new Error(`suspect bar: ${(chg * 100).toFixed(1)}% on ${new Date(rows[i][0]).toISOString().slice(0, 10)}`);

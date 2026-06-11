@@ -55,6 +55,18 @@
   #refresh-now { background: var(--panel); border: 1px solid var(--border); color: var(--muted); border-radius: 8px; padding: 7px 14px; font-size: 13px; cursor: pointer; }
   #refresh-now:hover { color: var(--text); border-color: var(--blue); }
   #refresh-now.busy { opacity: .5; pointer-events: none; }
+  #regime-wrap { padding: 0 24px 14px; }
+  #regime-card { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 10px 14px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .rchip { display: inline-flex; gap: 6px; align-items: center; font-size: 12px; padding: 4px 10px; border-radius: 14px; border: 1px solid var(--border); background: var(--panel2); cursor: default; white-space: nowrap; }
+  .rchip .lbl { color: var(--muted); }
+  .rchip .val { font-variant-numeric: tabular-nums; font-weight: 600; }
+  .rchip.up .val, .rchip.up .arr { color: var(--green); }
+  .rchip.down .val, .rchip.down .arr { color: var(--red); }
+  .rchip.flat .val, .rchip.flat .arr { color: var(--muted); }
+  .rchip.overall { font-weight: 800; font-size: 13px; letter-spacing: .5px; padding: 5px 14px; }
+  .rchip.overall.up { border-color: var(--green); color: var(--green); }
+  .rchip.overall.down { border-color: var(--red); color: var(--red); }
+  .rchip.overall.flat { border-color: var(--amber); color: var(--amber); }
   .stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 14px; }
   .stat { background: var(--panel2); border-radius: 8px; padding: 10px 12px; }
   .stat .k { font-size: 10px; text-transform: uppercase; letter-spacing: .8px; color: var(--muted); }
@@ -75,6 +87,7 @@
     <button data-g="cross" class="active">Cross-Asset</button>
     <button data-g="sectors">US Sectors</button>
     <button data-g="bonds">Bonds &amp; Credit</button>
+    <button data-g="factors">Factors</button>
   </div>
   <span class="label">Period</span>
   <div class="seg" id="period-seg">
@@ -96,6 +109,14 @@
     <button data-r="300">5m</button>
   </div>
   <button id="refresh-now" title="Refresh now">&#8635; Now</button>
+</div>
+
+<div id="regime-wrap" style="display:none">
+  <div id="regime-card">
+    <span class="label" title="One-glance macro regime: when these gauges disagree with a rotation signal, trust the signal less.">Regime</span>
+    <span id="regime-overall" class="rchip overall"></span>
+    <span id="regime-chips" style="display:contents"></span>
+  </div>
 </div>
 
 <main>
@@ -121,7 +142,7 @@
 </main>
 
 <footer>
-  <strong>Methodology.</strong> True fund-flow data is proprietary, so flows are estimated: each asset's <em>dividend/split-adjusted</em> return over the period is compared with its group average; the excess return is multiplied by average daily dollar volume (capped at 2.5&times; group median to prevent one giant asset dominating). All assets in a group are aligned on common trading dates, so every return covers the same calendar window (Bitcoin trades weekends; ETFs don't). Negative scores are treated as money leaving, positive as money entering, and outflows are distributed to inflows pro-rata to build the flow map. Data: Yahoo Finance daily bars. This is an analytical visualization, not investment advice.
+  <strong>Methodology.</strong> True fund-flow data is proprietary, so flows are estimated: each asset's <em>dividend/split-adjusted</em> return over the period is compared with its group average; the excess return is multiplied by average daily dollar volume (capped at 2.5&times; group median to prevent one giant asset dominating). All assets in a group are aligned on common trading dates, so every return covers the same calendar window (Bitcoin trades weekends; ETFs don't). Negative scores are treated as money leaving, positive as money entering, and outflows are distributed to inflows pro-rata to build the flow map. The regime bar scores classic risk gauges (risk-appetite ratios over ~1 month, VIX level, 10y−3m yield-curve slope) as risk-on / risk-off votes; copper and gold use front-month futures, yields use CBOE indices. Data: Yahoo Finance daily bars. This is an analytical visualization, not investment advice.
 </footer>
 
 <div id="tooltip"></div>
@@ -164,7 +185,23 @@ const GROUPS = {
     { t:"HYG", n:"High Yield",       c:"#db6d28" },
     { t:"EMB", n:"EM Debt",          c:"#b392f0" },
   ]},
+  factors: { title: "US Factors / Style", assets: [
+    { t:"IWF",  n:"Growth (R1000G)",  c:"#58a6ff" },
+    { t:"IWD",  n:"Value (R1000V)",   c:"#56d364" },
+    { t:"MTUM", n:"Momentum",         c:"#f0883e" },
+    { t:"QUAL", n:"Quality",          c:"#b392f0" },
+    { t:"USMV", n:"Min Volatility",   c:"#7ee787" },
+    { t:"SPHB", n:"High Beta",        c:"#f85149" },
+    { t:"SPLV", n:"Low Volatility",   c:"#3fb950" },
+    { t:"RSP",  n:"Equal Weight S&P", c:"#8b949e" },
+    { t:"SMH",  n:"Semiconductors",   c:"#79b8ff" },
+    { t:"IWM",  n:"Small Caps",       c:"#9ecbff" },
+  ]},
 };
+/* regime gauges — fetched & refreshed but never part of flow groups
+   (indices/futures: ratio trends and levels only) */
+const REGIME_TICKERS = ["^VIX", "^TNX", "^IRX", "GC=F", "HG=F", "XLY", "XLP", "SPHB", "SPLV", "RSP", "SPY", "SMH", "IWM", "HYG", "LQD", "TIP", "IEF"];
+const allTickers = () => [...new Set([...Object.values(GROUPS).flatMap(g => g.assets.map(a => a.t)), ...REGIME_TICKERS])];
 const PROXIES = [
   u => u, // direct (works if CORS someday allowed / extensions)
   u => "https://api.allorigins.win/raw?url=" + encodeURIComponent(u),
@@ -172,7 +209,7 @@ const PROXIES = [
   u => "https://api.codetabs.com/v1/proxy?quest=" + encodeURIComponent(u),
 ];
 // RRG benchmark per group (null = equal-weight basket of the group itself)
-const BENCH = { cross: null, sectors: "SPY", bonds: "AGG" };
+const BENCH = { cross: null, sectors: "SPY", bonds: "AGG", factors: "SPY" };
 
 /* ================= state ================= */
 const state = { group: "cross", period: 5, view: "flow", data: {}, source: null, refreshSec: 60, timer: null };
@@ -231,7 +268,7 @@ async function loadLocalJson(tickers) {
 }
 
 async function loadAll() {
-  const tickers = [...new Set(Object.values(GROUPS).flatMap(g => g.assets.map(a => a.t)))];
+  const tickers = allTickers();
   document.getElementById("loading-msg").textContent = "Loading market data…";
   if (await loadLocalJson(tickers)) return;
   document.getElementById("loading-msg").textContent = `Fetching live market data (0/${tickers.length})…`;
@@ -270,7 +307,7 @@ function applyQuote(sym, price, vol, ts) {
 }
 
 async function refreshQuotes() {
-  const tickers = [...new Set(Object.values(GROUPS).flatMap(g => g.assets.map(a => a.t)))].filter(t => state.data[t]);
+  const tickers = allTickers().filter(t => state.data[t]);
   // 1) try one batched spark request for everything
   const base = `https://query1.finance.yahoo.com/v8/finance/spark?symbols=${encodeURIComponent(tickers.join(","))}&range=1d&interval=1d`;
   for (const wrap of PROXIES) {
@@ -479,6 +516,75 @@ function computeHistory(assets, data, nCols = 12, step = 5) {
   return cols.length ? cols : null;
 }
 
+/* ================= macro regime gauges ================= */
+const REGIME_RATIOS = [
+  { a:"XLY",  b:"XLP",  label:"Discr/Staples", tip:"Consumer discretionary vs staples - rising means consumers and investors are risk-on." },
+  { a:"SPHB", b:"SPLV", label:"HiBeta/LoVol",  tip:"High-beta stocks vs low-volatility stocks - the purest equity risk-appetite ratio." },
+  { a:"RSP",  b:"SPY",  label:"Breadth",       tip:"Equal-weight vs cap-weight S&P 500 - rising means broad participation (healthy rally); falling means a few mega-caps carry the market (fragile)." },
+  { a:"SMH",  b:"SPY",  label:"Semis/S&P",     tip:"Semiconductors lead tech, tech leads the market - a leading risk gauge." },
+  { a:"IWM",  b:"SPY",  label:"Small/Large",   tip:"Small caps vs large caps - rising is risk-on and early-cycle behavior." },
+  { a:"HYG",  b:"LQD",  label:"Credit HY/IG",  tip:"High-yield vs investment-grade bonds - falling means credit stress building, often leads equity weakness." },
+  { a:"HG=F", b:"GC=F", label:"Copper/Gold",   tip:"Growth-sensitive copper vs defensive gold - rising means the market expects real economic growth." },
+];
+const REGIME_LOOKBACK = 21; // trading days ~ 1 month
+const REGIME_TH = 0.005;    // |1-month ratio change| below 0.5% counts as flat
+
+function ratioTrend(a, b, lb = REGIME_LOOKBACK) {
+  const A = state.data[a], B = state.data[b];
+  if (!A || !B) return null;
+  const mA = new Map(A.map(r => [dayKey(r.ts), r.adj ?? r.close]));
+  const mB = new Map(B.map(r => [dayKey(r.ts), r.adj ?? r.close]));
+  const common = [...mA.keys()].filter(k => mB.has(k)).sort();
+  if (common.length < lb + 1) return null;
+  const lastK = common[common.length - 1], prevK = common[common.length - 1 - lb];
+  return (mA.get(lastK) / mB.get(lastK)) / (mA.get(prevK) / mB.get(prevK)) - 1;
+}
+function lastClose(t) { const r = state.data[t]; return r && r.length ? r[r.length - 1].close : null; }
+
+function regimeChip(label, val, dir, tip) {
+  const cls = dir > 0 ? "up" : dir < 0 ? "down" : "flat";
+  const arr = dir > 0 ? "▲" : dir < 0 ? "▼" : "▬";
+  return `<span class="rchip ${cls}" title="${tip}"><span class="lbl">${label}</span><span class="arr">${arr}</span><span class="val">${val}</span></span>`;
+}
+
+function renderRegime() {
+  const wrap = document.getElementById("regime-wrap");
+  if (state.source === "sample") { wrap.style.display = "none"; return; }
+  let score = 0, max = 0;
+  const chips = [];
+  for (const s of REGIME_RATIOS) {
+    const chg = ratioTrend(s.a, s.b);
+    if (chg == null) continue;
+    const dir = chg > REGIME_TH ? 1 : chg < -REGIME_TH ? -1 : 0;
+    score += dir; max++;
+    chips.push(regimeChip(s.label, fmtPct(chg), dir, s.tip + " (trend over ~1 month)"));
+  }
+  const vix = lastClose("^VIX");
+  if (vix != null) {
+    const dir = vix < 18 ? 1 : vix > 24 ? -1 : 0;
+    score += dir; max++;
+    chips.push(regimeChip("VIX", vix.toFixed(1), dir, "CBOE volatility index - under 18 is calm (momentum-friendly), over 24 is stressed (signals unreliable, whipsaw risk)."));
+  }
+  const tnx = lastClose("^TNX"), irx = lastClose("^IRX");
+  if (tnx != null && irx != null) {
+    const spread = tnx - irx; // both quoted in %
+    const dir = spread > 0.2 ? 1 : spread < 0 ? -1 : 0;
+    score += dir; max++;
+    chips.push(regimeChip("Curve 10y−3m", (spread >= 0 ? "+" : "−") + Math.abs(spread * 100).toFixed(0) + "bp", dir, "Yield curve slope - negative (inverted) is a classic late-cycle / recession warning."));
+  }
+  const inf = ratioTrend("TIP", "IEF");
+  if (inf != null) chips.push(regimeChip("Inflation TIP/IEF", fmtPct(inf), 0, "TIPS vs nominal Treasuries - rising means the market is pricing more inflation. Informational, not scored."));
+  if (max < 4) { wrap.style.display = "none"; return; } // too few gauges to call a regime
+  const frac = score / max;
+  const [verdict, cls] = frac >= 0.35 ? ["RISK-ON", "up"] : frac <= -0.35 ? ["RISK-OFF", "down"] : ["MIXED", "flat"];
+  const overall = document.getElementById("regime-overall");
+  overall.textContent = verdict;
+  overall.className = "rchip overall " + cls;
+  overall.title = `${score >= 0 ? "+" : ""}${score} across ${max} scored gauges. Momentum signals are most reliable when taken in the direction of the regime.`;
+  document.getElementById("regime-chips").innerHTML = chips.join("");
+  wrap.style.display = "";
+}
+
 /* ================= rendering ================= */
 const fmtM = v => {
   const a = Math.abs(v);
@@ -504,6 +610,7 @@ const VIEW_META = {
 };
 
 function render() {
+  renderRegime();
   const g = GROUPS[state.group];
   const model = computeFlows(g.assets, state.data, state.period);
   document.getElementById("view-title").textContent = VIEW_META[state.view].title();

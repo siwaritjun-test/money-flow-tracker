@@ -1,6 +1,8 @@
 # Money Flow Tracker
 
-Live market-rotation monitor: estimates money flowing between US sectors, bonds & credit, and major asset classes from price × volume. Views: Sankey flow map, Relative Rotation Graph (RRG), 12-week flow history heatmap, plus an Asset Guide page detailing all 29 tickers. Daily / weekly / monthly periods, auto-refresh.
+Live market-rotation monitor: estimates money flowing between US sectors, factors/styles, bonds & credit, and major asset classes from price × volume. Views: Sankey flow map, Relative Rotation Graph (RRG), 12-week flow history heatmap, plus an Asset Guide page detailing all 43 tickers. Daily / weekly / monthly periods, auto-refresh.
+
+A **macro regime bar** sits above the views: risk-appetite ratios (discretionary/staples, high-beta/low-vol, equal-weight breadth, semis, small caps, high-yield credit, copper/gold — each scored on its ~1-month trend), the VIX level, and the 10y−3m yield-curve slope, summarized into a RISK-ON / MIXED / RISK-OFF verdict. Momentum signals are most trustworthy when they agree with the regime.
 
 ## Files
 

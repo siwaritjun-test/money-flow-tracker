@@ -54,6 +54,8 @@
     <button data-f="cross">Cross-Asset</button>
     <button data-f="sectors">US Sectors</button>
     <button data-f="bonds">Bonds &amp; Credit</button>
+    <button data-f="factors">Factors</button>
+    <button data-f="regime">Regime</button>
   </div>
 </header>
 <main id="main"></main>
@@ -214,9 +216,83 @@ const INFO = {
     inside:"Government bonds of ~30+ countries — Mexico, Saudi Arabia, Turkey, Brazil, Indonesia — issued in dollars (no local-FX risk, but full credit risk).",
     top:["Mexico","Saudi Arabia","Turkey","Brazil","Indonesia"],
     flow:"Global risk appetite + dollar gauge. EMB and EEM flowing together = broad EM bid; EMB outflows on a UUP surge = dollar squeeze on the periphery." },
+
+  /* ---------- factors / style ---------- */
+  "IWF": { g:"factors", name:"iShares Russell 1000 Growth ETF", issuer:"BlackRock (iShares)", er:"0.19%",
+    tracks:"Russell 1000 Growth — large caps with high growth expectations.",
+    inside:"The expensive half of the large-cap market: heavy tech and communication, the mega-cap platform names, high price-to-sales multiples.",
+    top:["NVIDIA","Apple","Microsoft","Amazon","Meta"],
+    flow:"One side of the growth↔value seesaw. IWF beating IWD = duration-loving, rate-sensitive leadership; usually thrives when yields fall." },
+  "IWD": { g:"factors", name:"iShares Russell 1000 Value ETF", issuer:"BlackRock (iShares)", er:"0.19%",
+    tracks:"Russell 1000 Value — large caps cheap on book value / earnings.",
+    inside:"Banks, energy, health care, industrials — the cash-flow-now half of the market. Low multiples, higher dividends.",
+    top:["Berkshire Hathaway","JPMorgan","Exxon","Johnson & Johnson","Walmart"],
+    flow:"The other side of the seesaw. IWD leading = reflation/rate-rise or defensive-quality rotation; classic late-cycle and recovery leadership." },
+  "MTUM": { g:"factors", name:"iShares MSCI USA Momentum Factor ETF", issuer:"BlackRock (iShares)", er:"0.15%",
+    tracks:"MSCI USA Momentum — stocks with the strongest 6–12 month risk-adjusted returns, rebalanced semi-annually.",
+    inside:"Whatever has been working: the portfolio re-forms around each cycle's winners, so its sector mix swings dramatically over time.",
+    top:["rotates with the market's recent winners"],
+    flow:"A meta-bet on trend persistence. MTUM outperforming = orderly trending market (momentum-friendly); sharp MTUM underperformance = factor crash / violent rotation, a regime-change warning." },
+  "QUAL": { g:"factors", name:"iShares MSCI USA Quality Factor ETF", issuer:"BlackRock (iShares)", er:"0.15%",
+    tracks:"MSCI USA Sector-Neutral Quality — high ROE, stable earnings, low debt.",
+    inside:"Profitable balance-sheet aristocrats, sector-neutralized so it isn't just a tech bet.",
+    top:["NVIDIA","Microsoft","Apple","Visa","Eli Lilly"],
+    flow:"The 'flight to quality without leaving stocks' trade. QUAL leading the market = investors getting selective — often a mid/late-cycle tell." },
+  "USMV": { g:"factors", name:"iShares MSCI USA Min Vol Factor ETF", issuer:"BlackRock (iShares)", er:"0.15%",
+    tracks:"MSCI USA Minimum Volatility — the least-volatile achievable basket of US large caps.",
+    inside:"Staples, utilities, health care, insurance — optimized to minimize portfolio volatility rather than maximize return.",
+    top:["defensive low-beta large caps"],
+    flow:"Defensive rotation gauge. USMV inflows while SPY stalls = de-risking inside equities; persistent USMV leadership often precedes broader drawdowns." },
+  "SPHB": { g:"factors", name:"Invesco S&P 500 High Beta ETF", issuer:"Invesco", er:"0.25%",
+    tracks:"The 100 S&P 500 stocks with the highest beta (sensitivity to market moves).",
+    inside:"The market's adrenaline sleeve — volatile cyclicals, semis, consumer discretionary. Amplifies whatever the S&P does.",
+    top:["high-beta cyclicals & semis"],
+    flow:"Pure risk appetite. SPHB/SPLV rising = aggressive positioning; that ratio rolling over while indexes hold = quiet de-risking under the surface." },
+  "SPLV": { g:"factors", name:"Invesco S&P 500 Low Volatility ETF", issuer:"Invesco", er:"0.25%",
+    tracks:"The 100 S&P 500 stocks with the lowest trailing 12-month volatility.",
+    inside:"Utilities, staples, insurance — the calmest quintile of the index, rebalanced quarterly.",
+    top:["utilities","staples","insurance"],
+    flow:"The hide-out. SPLV leadership = defensive regime; SPLV lagging badly = risk-on confirmed. Read it against SPHB as one ratio." },
+  "RSP": { g:"factors", name:"Invesco S&P 500 Equal Weight ETF", issuer:"Invesco", er:"0.20%",
+    tracks:"S&P 500 with every stock at ~0.2% weight, rebalanced quarterly.",
+    inside:"The same 500 companies as SPY but democratic: the 490 non-mega-caps matter as much as the top 10.",
+    top:["all 500, equally"],
+    flow:"The breadth gauge. RSP/SPY rising = broad participation (healthy rally); falling = a handful of mega-caps carrying the index (fragile rally)." },
+  "SMH": { g:"factors", name:"VanEck Semiconductor ETF", issuer:"VanEck", er:"0.35%",
+    tracks:"MVIS US Listed Semiconductor 25 — the largest semiconductor companies.",
+    inside:"NVIDIA, TSMC, Broadcom, AMD, ASML and the rest of the chip complex — the market's highest-octane growth cyclical.",
+    top:["NVIDIA ~20%","TSMC ~13%","Broadcom","AMD","ASML"],
+    flow:"The market's leading edge: semis lead tech, tech leads the S&P. SMH/SPY turning down while indexes rise has historically been an early warning." },
+
+  /* ---------- regime gauges (indices & futures — not flow assets) ---------- */
+  "^VIX": { g:"regime", name:"CBOE Volatility Index", issuer:"CBOE (index)", er:"—",
+    tracks:"30-day implied volatility of S&P 500 options.",
+    inside:"Not tradable directly — a calculation from option prices. Under ~18 = calm; over ~24 = stress; spikes >35%/day happen in crashes.",
+    top:["S&P 500 option implied vol"],
+    flow:"The regime thermostat. Momentum strategies historically work in low/falling VIX and get whipsawed in high VIX — size positions accordingly." },
+  "^TNX": { g:"regime", name:"10-Year US Treasury Yield", issuer:"CBOE (index)", er:"—",
+    tracks:"Yield on the benchmark 10-year US Treasury note (in %).",
+    inside:"The world's reference interest rate: discount rate for equities, anchor for mortgages and corporate borrowing.",
+    top:["10y Treasury yield"],
+    flow:"Rising 10y = headwind for long-duration growth stocks and bonds; falling = either disinflation relief (risk-on) or growth scare (risk-off) — read it with credit." },
+  "^IRX": { g:"regime", name:"13-Week US T-Bill Yield", issuer:"CBOE (index)", er:"—",
+    tracks:"Yield on 3-month US Treasury bills (in %) — effectively the Fed's policy stance.",
+    inside:"The short end of the curve. 10y minus 3m (^TNX − ^IRX) is the yield-curve slope shown in the regime bar.",
+    top:["3m T-bill yield"],
+    flow:"When this exceeds the 10y yield (inverted curve), the bond market is pricing late-cycle stress — historically the best single recession warning." },
+  "GC=F": { g:"regime", name:"Gold Futures (front month)", issuer:"COMEX futures", er:"—",
+    tracks:"Front-month COMEX gold futures price.",
+    inside:"The defensive metal — bid on fear, falling real yields, and dollar weakness. Denominator of the copper/gold growth gauge.",
+    top:["gold futures"],
+    flow:"Read against copper: gold outperforming copper = defensive/falling-growth regime, even when stocks haven't reacted yet." },
+  "HG=F": { g:"regime", name:"Copper Futures (front month)", issuer:"COMEX futures", er:"—",
+    tracks:"Front-month COMEX copper futures price.",
+    inside:"'Dr. Copper' — wired into construction, grids, EVs and electronics, so its price embeds a real-time global growth forecast.",
+    top:["copper futures"],
+    flow:"Copper/gold rising = market pricing real growth (supports cyclicals, yields); falling = growth doubts (supports bonds, defensives)." },
 };
 
-const GROUP_TITLES = { cross: "Cross-Asset", sectors: "US Sectors — Select Sector SPDRs (cap-weighted slices of the S&P 500)", bonds: "Bonds & Credit" };
+const GROUP_TITLES = { cross: "Cross-Asset", sectors: "US Sectors — Select Sector SPDRs (cap-weighted slices of the S&P 500)", bonds: "Bonds & Credit", factors: "US Factors / Style", regime: "Regime Gauges (indices & futures — power the regime bar, not flow assets)" };
 const PROXIES = [
   u => u,
   u => "https://api.allorigins.win/raw?url=" + encodeURIComponent(u),
@@ -244,7 +320,7 @@ function card(t, a) {
 function renderAll() {
   const main = document.getElementById("main");
   let html = "";
-  for (const g of ["cross", "sectors", "bonds"]) {
+  for (const g of ["cross", "sectors", "bonds", "factors", "regime"]) {
     html += `<div class="group-title" data-g="${g}">${GROUP_TITLES[g]}</div><div class="grid" data-g="${g}">`;
     for (const [t, a] of Object.entries(INFO)) if (a.g === g) html += card(t, a);
     html += "</div>";
