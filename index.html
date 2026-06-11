@@ -179,7 +179,7 @@ const state = { group: "cross", period: 5, view: "flow", data: {}, source: null,
 
 /* ================= data layer ================= */
 async function fetchTicker(t) {
-  const base = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(t)}?range=6mo&interval=1d`;
+  const base = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(t)}?range=1y&interval=1d`;
   for (const wrap of PROXIES) {
     try {
       const r = await fetch(wrap(base), { signal: AbortSignal.timeout(12000) });
@@ -387,7 +387,7 @@ function computeFlows(assets, data, period) {
 /* ================= RRG model (JdK-style approximation) ================= */
 function dayKey(ts) { return new Date(ts).toISOString().slice(0, 10); }
 
-function computeRRG(assets, data, benchTicker) {
+function computeRRG(assets, data, benchTicker, step = 5) {
   // align all series (plus benchmark) on common trading dates
   const maps = {};
   const need = [...assets.map(a => a.t)];
@@ -405,8 +405,9 @@ function computeRRG(assets, data, benchTicker) {
     common = common ? [...common].filter(k => keys.has(k)) : [...keys];
   }
   common.sort();
-  const SMA = 21, MOM = 5, TRAIL = 6, STEP = 5;
-  if (common.length < SMA + MOM + TRAIL * STEP) return null;
+  const STEP = Math.max(1, step), SMA = 21, MOM = Math.max(2, STEP);
+  if (common.length < SMA + MOM + 2 * STEP + 1) return null;
+  const TRAIL = Math.max(3, Math.min(STEP === 1 ? 10 : 6, Math.floor((common.length - SMA - MOM - 1) / STEP)));
 
   // benchmark series: explicit ticker or equal-weight basket (normalized)
   const bench = common.map((k, i) => {
@@ -436,20 +437,20 @@ function computeRRG(assets, data, benchTicker) {
 }
 
 /* ================= weekly flow history ================= */
-function computeHistory(assets, data, weeks = 12) {
+function computeHistory(assets, data, nCols = 12, step = 5) {
   const cols = [];
-  for (let w = weeks - 1; w >= 0; w--) {
+  for (let w = nCols - 1; w >= 0; w--) {
     const sliced = {};
     let endTs = 0;
     for (const a of assets) {
       const rows = data[a.t];
       if (!rows) continue;
-      const cut = rows.length - w * 5;
-      if (cut < 6) continue;
+      const cut = rows.length - w * step;
+      if (cut < step + 1) continue;
       sliced[a.t] = rows.slice(0, cut);
       endTs = Math.max(endTs, sliced[a.t][sliced[a.t].length - 1].ts);
     }
-    const m = computeFlows(assets, sliced, 5);
+    const m = computeFlows(assets, sliced, step);
     if (m) cols.push({ endTs, flows: Object.fromEntries(m.stats.map(s => [s.t, s.flow])) });
   }
   return cols.length ? cols : null;
@@ -471,17 +472,18 @@ function showTip(html, ev) {
 }
 function hideTip() { tooltip.style.display = "none"; }
 
+const PNAME = { 1: "day", 5: "week", 21: "month" };
 const VIEW_META = {
-  flow: { title: "Flow Map", hint: 'Estimated money rotating <span style="color:var(--red)">out of</span> underperformers (left) <span style="color:var(--blue)">into</span> outperformers (right) over the selected period. Ribbon width &asymp; relative dollar pressure.' },
-  rrg: { title: "Relative Rotation Graph", hint: "Each asset vs its benchmark: relative strength (x) and its momentum (y). Assets orbit clockwise — Improving → Leading → Weakening → Lagging. Tail shows the last 8 weeks." },
-  history: { title: "Flow History — week by week", hint: "Estimated net weekly flow ($M/day) for each asset over the last 12 weeks. Green = money in, red = money out." },
+  flow: { title: () => "Flow Map", hint: () => 'Estimated money rotating <span style="color:var(--red)">out of</span> underperformers (left) <span style="color:var(--blue)">into</span> outperformers (right) over the selected period. Ribbon width &asymp; relative dollar pressure.' },
+  rrg: { title: () => "Relative Rotation Graph", hint: () => `Each asset vs its benchmark: relative strength (x) and its momentum (y). Assets orbit clockwise — Improving → Leading → Weakening → Lagging. One trail point per ${PNAME[state.period]}.` },
+  history: { title: () => `Flow History — ${PNAME[state.period]} by ${PNAME[state.period]}`, hint: () => `Estimated net flow ($M/day) for each asset per ${PNAME[state.period]}, up to 12 ${PNAME[state.period]}s back. Green = money in, red = money out.` },
 };
 
 function render() {
   const g = GROUPS[state.group];
   const model = computeFlows(g.assets, state.data, state.period);
-  document.getElementById("view-title").textContent = VIEW_META[state.view].title;
-  document.getElementById("view-hint").innerHTML = VIEW_META[state.view].hint;
+  document.getElementById("view-title").textContent = VIEW_META[state.view].title();
+  document.getElementById("view-hint").innerHTML = VIEW_META[state.view].hint();
   const sank = document.getElementById("sankey"), rrgEl = document.getElementById("rrg"), histEl = document.getElementById("history");
   sank.style.display = state.view === "flow" ? "" : "none";
   rrgEl.style.display = state.view === "rrg" ? "" : "none";
@@ -499,7 +501,7 @@ function render() {
 }
 
 function renderRRG(g) {
-  const series = computeRRG(g.assets, state.data, BENCH[state.group]);
+  const series = computeRRG(g.assets, state.data, BENCH[state.group], state.period);
   const svg = d3.select("#rrg");
   const wrap = document.getElementById("sankey-wrap");
   const W = wrap.clientWidth, H = Math.max(520, Math.min(640, W * 0.78));
@@ -586,7 +588,7 @@ function renderRRG(g) {
 }
 
 function renderHistory(g) {
-  const cols = computeHistory(g.assets, state.data, 12);
+  const cols = computeHistory(g.assets, state.data, 12, state.period);
   const el = document.getElementById("history");
   if (!cols) { el.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:40px;text-align:center">Not enough history.</div>'; return; }
   const latest = cols[cols.length - 1].flows;
@@ -608,11 +610,11 @@ function renderHistory(g) {
       const v = c.flows[a.t];
       html += v == null
         ? '<td style="background:var(--panel2);border-radius:3px"></td>'
-        : `<td style="background:${color(v)};border-radius:3px;text-align:center;color:#fff;font-variant-numeric:tabular-nums;padding:5px 2px;cursor:default" title="${a.n} — week ending ${fmtD(c.endTs)}: ${v >= 0 ? "+" : ""}$${fmtM(v)}/day">${v >= 0 ? "+" : "−"}${Math.abs(v) >= 100 ? Math.abs(v).toFixed(0) : Math.abs(v).toFixed(1)}</td>`;
+        : `<td style="background:${color(v)};border-radius:3px;text-align:center;color:#fff;font-variant-numeric:tabular-nums;padding:5px 2px;cursor:default" title="${a.n} — ${PNAME[state.period]} ending ${fmtD(c.endTs)}: ${v >= 0 ? "+" : ""}$${fmtM(v)}/day">${v >= 0 ? "+" : "−"}${Math.abs(v) >= 100 ? Math.abs(v).toFixed(0) : Math.abs(v).toFixed(1)}</td>`;
     }
     html += "</tr>";
   }
-  html += '</tbody></table><div style="color:var(--muted);font-size:11px;margin-top:8px">Values in $M/day of estimated rotation pressure. Each column = trailing 5 trading days ending on that date.</div>';
+  html += `</tbody></table><div style="color:var(--muted);font-size:11px;margin-top:8px">Values in $M/day of estimated rotation pressure. Each column = trailing ${state.period} trading day${state.period > 1 ? "s" : ""} ending on that date.</div>`;
   el.innerHTML = html;
 }
 
