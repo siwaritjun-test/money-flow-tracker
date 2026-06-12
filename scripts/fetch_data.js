@@ -11,6 +11,7 @@
  */
 const fs = require("fs");
 const path = require("path");
+const { STOCK_UNIVERSE } = require("./stock_universe");
 
 const TICKERS = [
   // cross-asset
@@ -25,10 +26,14 @@ const TICKERS = [
   "^VIX", "^TNX", "^IRX", "GC=F", "HG=F",
 ];
 
+// individual stocks (stocks.html) — fetched with high/low for MFI/ATR,
+// written to stocks.json, never archived (keeps archive.json lean)
+const STOCK_TICKERS = [...new Set(Object.values(STOCK_UNIVERSE).flatMap(l => l.map(s => s.t)))];
+
 const ROOT = path.join(__dirname, "..");
 const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36";
 
-async function fetchTicker(t, attempt = 1) {
+async function fetchTicker(t, withHL = false, attempt = 1) {
   const host = attempt % 2 ? "query1" : "query2"; // alternate hosts on retry
   const url = `https://${host}.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(t)}?range=1y&interval=1d`;
   try {
@@ -46,16 +51,23 @@ async function fetchTicker(t, attempt = 1) {
       if (c == null || v == null || !(c > 0) || v < 0) continue;
       const a = (adj && adj[i] > 0) ? adj[i] : c;
       const ts = res.timestamp[i] * 1000;
-      byDay.set(new Date(ts).toISOString().slice(0, 10), [ts, +c.toFixed(4), v, +a.toFixed(4)]);
+      const row = [ts, +c.toFixed(4), v, +a.toFixed(4)];
+      if (withHL) {
+        const h = q.high[i], l = q.low[i];
+        row.push(+(h > 0 ? h : c).toFixed(4), +(l > 0 ? l : c).toFixed(4));
+      }
+      byDay.set(new Date(ts).toISOString().slice(0, 10), row);
     }
     const rows = [...byDay.values()].sort((x, y) => x[0] - y[0]);
     if (rows.length < 25) throw new Error("too few rows: " + rows.length);
     // sanity: flag absurd one-day moves (bad ticks). Crypto and indices exempt —
     // VIX legitimately spikes >35%/day, and low short-term yields (^IRX) move hugely in % terms.
+    // Single stocks can gap >35% on earnings, so they get a looser 60% threshold.
     if (!t.includes("-USD") && !t.startsWith("^")) {
+      const maxMove = withHL ? 0.60 : 0.35;
       for (let i = 1; i < rows.length; i++) {
         const chg = rows[i][3] / rows[i - 1][3] - 1;
-        if (Math.abs(chg) > 0.35) throw new Error(`suspect bar: ${(chg * 100).toFixed(1)}% on ${new Date(rows[i][0]).toISOString().slice(0, 10)}`);
+        if (Math.abs(chg) > maxMove) throw new Error(`suspect bar: ${(chg * 100).toFixed(1)}% on ${new Date(rows[i][0]).toISOString().slice(0, 10)}`);
       }
     }
     // sanity: last bar must be recent (≤7 days), else the feed is stale/broken
@@ -64,25 +76,30 @@ async function fetchTicker(t, attempt = 1) {
   } catch (e) {
     if (attempt < 4) {
       await new Promise(r => setTimeout(r, 2000 * attempt));
-      return fetchTicker(t, attempt + 1);
+      return fetchTicker(t, withHL, attempt + 1);
     }
     console.error(`FAIL ${t}: ${e.message}`);
     return null;
   }
 }
 
-(async function main() {
+async function fetchSet(tickers, withHL) {
   const series = {};
   let idx = 0, ok = 0;
   async function worker() {
-    while (idx < TICKERS.length) {
-      const t = TICKERS[idx++];
-      const rows = await fetchTicker(t);
+    while (idx < tickers.length) {
+      const t = tickers[idx++];
+      const rows = await fetchTicker(t, withHL);
       if (rows) { series[t] = rows; ok++; console.log(`OK   ${t}: ${rows.length} bars, last close ${rows[rows.length - 1][1]}`); }
       await new Promise(r => setTimeout(r, 300)); // be polite
     }
   }
   await Promise.all([worker(), worker(), worker()]);
+  return { series, ok };
+}
+
+(async function main() {
+  const { series, ok } = await fetchSet(TICKERS, false);
 
   if (ok < TICKERS.length * 0.7) {
     console.error(`Only ${ok}/${TICKERS.length} tickers fetched — aborting without writing.`);
@@ -93,6 +110,17 @@ async function fetchTicker(t, attempt = 1) {
   const out = { updated: new Date().toISOString(), tickers: ok, series };
   fs.writeFileSync(path.join(ROOT, "data.json"), JSON.stringify(out));
   console.log(`Wrote data.json (${ok} tickers)`);
+
+  // stocks.json — individual stocks for stocks.html, row [ts, close, vol, adj, high, low].
+  // A bad stock run never blocks the ETF data above.
+  const stk = await fetchSet(STOCK_TICKERS, true);
+  if (stk.ok >= STOCK_TICKERS.length * 0.7) {
+    fs.writeFileSync(path.join(ROOT, "stocks.json"),
+      JSON.stringify({ updated: new Date().toISOString(), tickers: stk.ok, series: stk.series }));
+    console.log(`Wrote stocks.json (${stk.ok}/${STOCK_TICKERS.length} stocks)`);
+  } else {
+    console.error(`Only ${stk.ok}/${STOCK_TICKERS.length} stocks fetched — keeping previous stocks.json.`);
+  }
 
   // archive.json — permanent daily-close history, merged across runs
   const archPath = path.join(ROOT, "archive.json");

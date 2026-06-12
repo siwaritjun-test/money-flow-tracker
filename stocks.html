@@ -1,0 +1,605 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Stock Picker — Money Flow Tracker</title>
+<style>
+  :root {
+    --bg: #0d1117; --panel: #161b22; --panel2: #1c2128; --border: #2d333b;
+    --text: #e6edf3; --muted: #8b949e; --green: #3fb950; --red: #f85149;
+    --blue: #58a6ff; --amber: #d29922; --purple: #b392f0;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; min-height: 100vh; }
+  header { padding: 18px 24px 0; display: flex; flex-wrap: wrap; align-items: center; gap: 14px; }
+  h1 { font-size: 20px; font-weight: 700; letter-spacing: -0.3px; }
+  h1 .sub { color: var(--muted); font-weight: 400; font-size: 13px; margin-left: 10px; }
+  header a { color: var(--blue); font-size: 13px; text-decoration: none; }
+  .badge { font-size: 11px; padding: 3px 10px; border-radius: 12px; border: 1px solid var(--border); color: var(--muted); }
+  .badge.live { color: var(--green); border-color: var(--green); }
+  .badge.sample { color: var(--amber); border-color: var(--amber); }
+  #updated { font-size: 11px; color: var(--muted); margin-left: auto; }
+  .controls { padding: 14px 24px 4px; display: flex; flex-wrap: wrap; gap: 14px; align-items: center; }
+  .label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.8px; color: var(--muted); margin-right: -6px; }
+  .seg { display: inline-flex; background: var(--panel); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  .seg button { background: none; border: none; color: var(--muted); padding: 7px 14px; font-size: 13px; cursor: pointer; border-right: 1px solid var(--border); }
+  .seg button:last-child { border-right: none; }
+  .seg button.active { background: var(--blue); color: #fff; font-weight: 600; }
+  .seg button:hover:not(.active) { color: var(--text); }
+  .risk-inputs { display: inline-flex; gap: 8px; align-items: center; font-size: 12px; color: var(--muted); }
+  .risk-inputs input { width: 90px; background: var(--panel); border: 1px solid var(--border); border-radius: 6px; color: var(--text); padding: 6px 8px; font-size: 13px; }
+  .risk-inputs input:focus { outline: none; border-color: var(--blue); }
+  #regime-wrap { padding: 10px 24px 0; }
+  #regime-card { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 10px 14px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .rchip { display: inline-flex; gap: 6px; align-items: center; font-size: 12px; padding: 4px 10px; border-radius: 14px; border: 1px solid var(--border); background: var(--panel2); cursor: default; white-space: nowrap; }
+  .rchip .lbl { color: var(--muted); }
+  .rchip .val { font-variant-numeric: tabular-nums; font-weight: 600; }
+  .rchip.up .val, .rchip.up .arr { color: var(--green); }
+  .rchip.down .val, .rchip.down .arr { color: var(--red); }
+  .rchip.flat .val, .rchip.flat .arr { color: var(--muted); }
+  .rchip.overall { font-weight: 800; font-size: 13px; letter-spacing: .5px; padding: 5px 14px; }
+  .rchip.overall.up { border-color: var(--green); color: var(--green); }
+  .rchip.overall.down { border-color: var(--red); color: var(--red); }
+  .rchip.overall.flat { border-color: var(--amber); color: var(--amber); }
+  main { padding: 14px 24px 24px; display: flex; flex-direction: column; gap: 14px; }
+  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 16px; }
+  .card h2 { font-size: 13px; text-transform: uppercase; letter-spacing: 0.8px; color: var(--muted); margin-bottom: 4px; }
+  .card .hint { font-size: 12px; color: var(--muted); margin-bottom: 12px; }
+  /* sector strip */
+  #sector-strip { display: grid; grid-template-columns: repeat(auto-fill, minmax(168px, 1fr)); gap: 10px; }
+  .sec-card { background: var(--panel2); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; cursor: pointer; transition: border-color .15s; position: relative; }
+  .sec-card:hover { border-color: var(--blue); }
+  .sec-card.selected { border-color: var(--blue); box-shadow: 0 0 0 1px var(--blue); }
+  .sec-card .nm { font-size: 12.5px; font-weight: 700; }
+  .sec-card .tk { color: var(--muted); font-size: 11px; font-weight: 400; }
+  .sec-card .quad { font-size: 10px; font-weight: 700; letter-spacing: .5px; padding: 1px 7px; border-radius: 8px; display: inline-block; margin: 5px 0 4px; }
+  .q-Leading { background: rgba(63,185,80,.15); color: var(--green); }
+  .q-Improving { background: rgba(88,166,255,.15); color: var(--blue); }
+  .q-Weakening { background: rgba(210,153,34,.15); color: var(--amber); }
+  .q-Lagging { background: rgba(248,81,73,.15); color: var(--red); }
+  .sec-card .mets { font-size: 11px; color: var(--muted); line-height: 1.55; font-variant-numeric: tabular-nums; }
+  .sec-card .rank { position: absolute; top: 8px; right: 10px; font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .sec-card.r1 .rank, .sec-card.r2 .rank, .sec-card.r3 .rank { color: var(--green); font-weight: 700; }
+  /* breadth + picks layout */
+  .two-col { display: grid; grid-template-columns: 320px 1fr; gap: 14px; }
+  @media (max-width: 980px) { .two-col { grid-template-columns: 1fr; } }
+  .stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .stat { background: var(--panel2); border-radius: 8px; padding: 10px 12px; }
+  .stat .k { font-size: 10px; text-transform: uppercase; letter-spacing: .8px; color: var(--muted); }
+  .stat .v { font-size: 16px; font-weight: 700; margin-top: 2px; font-variant-numeric: tabular-nums; }
+  #breadth-verdict { margin-top: 10px; font-size: 12px; color: var(--muted); line-height: 1.5; }
+  #picks { display: grid; grid-template-columns: repeat(auto-fill, minmax(195px, 1fr)); gap: 10px; }
+  .pick { background: var(--panel2); border: 1px solid var(--border); border-radius: 8px; padding: 12px; cursor: pointer; }
+  .pick:hover { border-color: var(--blue); }
+  .pick .top { display: flex; align-items: baseline; gap: 8px; }
+  .pick .tk { font-size: 15px; font-weight: 800; }
+  .pick .score-badge { margin-left: auto; font-size: 12px; font-weight: 800; padding: 2px 8px; border-radius: 10px; background: rgba(63,185,80,.15); color: var(--green); font-variant-numeric: tabular-nums; }
+  .pick .nm { font-size: 11px; color: var(--muted); margin: 2px 0 7px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .pick .mets { font-size: 11px; line-height: 1.65; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .pick .mets b { color: var(--text); font-weight: 600; }
+  /* screener table */
+  table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  th { text-align: right; color: var(--muted); font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: .4px; padding: 7px 8px; border-bottom: 1px solid var(--border); cursor: pointer; white-space: nowrap; user-select: none; }
+  th:hover { color: var(--text); }
+  th.l, td.l { text-align: left; }
+  th.sorted { color: var(--blue); }
+  td { padding: 7px 8px; border-bottom: 1px solid var(--panel2); text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  tr.stock-row { cursor: pointer; }
+  tr.stock-row:hover td { background: rgba(88,166,255,.04); }
+  .pos { color: var(--green); } .neg { color: var(--red); } .mut { color: var(--muted); }
+  .tk-cell { font-weight: 700; }
+  .star { cursor: pointer; color: var(--border); font-size: 14px; }
+  .star.on { color: var(--amber); }
+  .sec-chip { font-size: 10px; padding: 1px 7px; border-radius: 8px; }
+  .scorebar { display: inline-flex; align-items: center; gap: 6px; justify-content: flex-end; }
+  .scorebar .bb { width: 52px; height: 8px; background: var(--panel2); border-radius: 4px; overflow: hidden; }
+  .scorebar .bf { height: 100%; border-radius: 4px; }
+  .flag { font-size: 10px; font-weight: 700; padding: 1px 5px; border-radius: 6px; margin-left: 3px; }
+  .f-acc { background: rgba(63,185,80,.18); color: var(--green); }
+  .f-dist { background: rgba(248,81,73,.18); color: var(--red); }
+  .f-vol { background: rgba(210,153,34,.18); color: var(--amber); }
+  .f-hi { background: rgba(88,166,255,.18); color: var(--blue); }
+  tr.detail td { background: var(--panel2); padding: 14px; text-align: left; white-space: normal; }
+  .detail-grid { display: grid; grid-template-columns: 260px 1fr; gap: 18px; align-items: start; }
+  @media (max-width: 760px) { .detail-grid { grid-template-columns: 1fr; } }
+  .detail-grid dl { display: grid; grid-template-columns: auto auto; gap: 3px 16px; font-size: 12px; }
+  .detail-grid dt { color: var(--muted); }
+  .detail-grid dd { text-align: right; font-variant-numeric: tabular-nums; }
+  #loading { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; color: var(--muted); font-size: 13px; padding: 80px 0; }
+  .spinner { width: 28px; height: 28px; border: 3px solid var(--border); border-top-color: var(--blue); border-radius: 50%; animation: spin 0.9s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  footer { padding: 0 24px 24px; font-size: 11px; color: var(--muted); line-height: 1.6; max-width: 980px; }
+  #tooltip { position: fixed; pointer-events: none; background: var(--panel2); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; font-size: 12px; line-height: 1.5; display: none; z-index: 10; max-width: 300px; box-shadow: 0 8px 24px rgba(0,0,0,.5); }
+  .table-wrap { overflow-x: auto; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Stock Picker<span class="sub">momentum candidates from money flow &times; sector rotation</span></h1>
+  <span id="status" class="badge">loading…</span>
+  <a href="index.html">&larr; Flow Tracker</a>
+  <a href="assets.html">Asset Guide &rarr;</a>
+  <span id="updated"></span>
+</header>
+
+<div class="controls">
+  <span class="label">Show</span>
+  <div class="seg" id="filter-seg">
+    <button data-f="leaders" class="active" title="Stocks whose sector is Leading or Improving on the RRG, or ranked top-5 by 1m+3m excess return — the momentum playbook">Leading sectors</button>
+    <button data-f="all">All sectors</button>
+    <button data-f="watch" title="Your starred stocks (saved in this browser)">&#9733; Watchlist</button>
+  </div>
+  <span class="label">Risk</span>
+  <div class="risk-inputs" title="Used for the stop-loss / position-size suggestion in each stock's detail row (click a row).">
+    Account $ <input id="acct" type="number" min="0" step="1000" value="10000">
+    Risk/trade % <input id="riskpct" type="number" min="0.1" max="10" step="0.1" value="1">
+  </div>
+</div>
+
+<div id="regime-wrap" style="display:none">
+  <div id="regime-card">
+    <span class="label" title="Macro regime from the main tracker's gauges. Momentum entries work best when the regime is RISK-ON.">Regime</span>
+    <span id="regime-overall" class="rchip overall"></span>
+    <span id="regime-chips" style="display:contents"></span>
+  </div>
+</div>
+
+<main>
+  <div id="loading"><div class="spinner"></div><div id="loading-msg">Loading market data…</div></div>
+  <div id="content" style="display:none; flex-direction:column; gap:14px">
+
+    <div class="card">
+      <h2>Sector Momentum</h2>
+      <div class="hint">Each sector ranked by 1m + 3m excess return vs SPY, with estimated money flow ($M/day, 1 month) and its RRG quadrant. Click a sector to filter the screener; momentum buys come from <b style="color:var(--green)">Leading</b> / <b style="color:var(--blue)">Improving</b> sectors with positive flow.</div>
+      <div id="sector-strip"></div>
+    </div>
+
+    <div class="two-col">
+      <div class="card">
+        <h2>Market Breadth <span style="text-transform:none;letter-spacing:0;font-weight:400">(88-stock universe)</span></h2>
+        <div class="hint">Participation check: momentum signals are far more reliable when most stocks are in uptrends, not just a few mega-caps.</div>
+        <div class="stat-grid" id="breadth-grid"></div>
+        <div id="breadth-verdict"></div>
+      </div>
+      <div class="card">
+        <h2>Top Momentum Picks</h2>
+        <div class="hint">Highest composite score inside Leading/Improving sectors. Click a card to jump to its detail row.</div>
+        <div id="picks"></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2 id="table-title">Momentum Screener</h2>
+      <div class="hint">Composite score = relative strength vs own sector (1m 15% + 3m 20%) &middot; MFI-14 (12.5%) &middot; OBV money-flow trend (12.5%) &middot; distance to 52w high (15%) &middot; volume surge (10%) &middot; above 20/50-day SMA (15%). Cross-sectional metrics are percentile-ranked across the universe. Click a column to sort, a row for stop-loss &amp; position-size detail. Flags: <span class="flag f-acc">ACC</span> accumulation divergence (price down, OBV up) &middot; <span class="flag f-dist">DIST</span> distribution (price up, OBV down) &middot; <span class="flag f-vol">VOL</span> unusual volume today (&ge;2&times; normal) &middot; <span class="flag f-hi">HI</span> within 2% of 52-week high.</div>
+      <div class="table-wrap">
+      <table id="screener">
+        <thead><tr>
+          <th class="l" data-k="star" title="Watchlist">&#9733;</th>
+          <th class="l" data-k="t">Ticker</th>
+          <th class="l" data-k="sector">Sector</th>
+          <th data-k="score" class="sorted">Score &darr;</th>
+          <th data-k="price">Price</th>
+          <th data-k="chg1d">1D</th>
+          <th data-k="ret21">1M</th>
+          <th data-k="rs21" title="1-month return minus the sector ETF's — is it leading its own sector?">RS 1M</th>
+          <th data-k="rs63" title="3-month return minus the sector ETF's">RS 3M</th>
+          <th data-k="mfi" title="Money Flow Index (14d): volume-weighted RSI. >80 hot, <20 washed out.">MFI</th>
+          <th data-k="obvT" title="On-balance-volume change over 21 days, in days of average volume. Positive = net accumulation.">OBV 21d</th>
+          <th data-k="flow21" title="Signed dollar volume over 21 days — estimated net $ bought (+) or sold (−).">MF $21d</th>
+          <th data-k="volX" title="5-day avg volume ÷ 3-month avg volume">Vol&times;</th>
+          <th data-k="prox52" title="Price as % of 52-week high — momentum leaders hold near 100%">%52wH</th>
+          <th class="l" data-k="flags">Flags</th>
+        </tr></thead>
+        <tbody id="tbody"></tbody>
+      </table>
+      </div>
+    </div>
+
+  </div>
+</main>
+
+<footer>
+  <strong>Method.</strong> Universe: ~8 largest/most liquid holdings of each SPDR sector ETF (88 stocks). The momentum playbook implemented here: (1) the regime bar says whether risk-taking is being rewarded at all; (2) sector money flow + RRG quadrant pick <em>where</em> to fish; (3) the composite score picks the strongest fish — relative strength vs its own sector, money-flow indicators (MFI, OBV trend, signed dollar volume), proximity to 52-week highs, volume confirmation and trend filters. Stops are suggested at 2&times;ATR(14) below price, with position size = (account &times; risk%) &divide; stop distance. Returns use dividend/split-adjusted closes. Data: Yahoo Finance daily bars via the repo's GitHub Action. Estimates, not actual fund flows; educational tool, not investment advice.
+</footer>
+
+<div id="tooltip"></div>
+
+<script src="scripts/stock_universe.js"></script>
+<script src="scripts/stock_model.js"></script>
+<script>
+/* ================= data layer ================= */
+const PROXIES = [
+  u => u,
+  u => "https://api.allorigins.win/raw?url=" + encodeURIComponent(u),
+  u => "https://corsproxy.io/?url=" + encodeURIComponent(u),
+  u => "https://api.codetabs.com/v1/proxy?quest=" + encodeURIComponent(u),
+];
+const ETF_NEEDED = ["SPY", ...Object.keys(STOCK_UNIVERSE),
+  "^VIX", "^TNX", "^IRX", "GC=F", "HG=F", "XLY", "XLP", "SPHB", "SPLV", "RSP", "SMH", "IWM", "HYG", "LQD"];
+const state = { etf: {}, stocks: {}, filter: "leaders", sector: null, sortK: "score", sortDir: -1, open: null, source: null, updated: null };
+
+const rowsFromArr = rows => rows.map(([ts, close, vol, adj, high, low]) => ({
+  ts, close, vol, adj: adj > 0 ? adj : close,
+  high: high > 0 ? high : close, low: low > 0 ? low : close,
+}));
+
+async function loadJson(file) {
+  const r = await fetch(file + "?t=" + Date.now(), { signal: AbortSignal.timeout(10000) });
+  if (!r.ok) throw new Error("HTTP " + r.status);
+  const j = await r.json();
+  if (!j?.series) throw new Error("bad payload");
+  return j;
+}
+
+async function fetchTickerLive(t, withHL) {
+  const base = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(t)}?range=1y&interval=1d`;
+  for (const wrap of PROXIES) {
+    try {
+      const r = await fetch(wrap(base), { signal: AbortSignal.timeout(12000) });
+      if (!r.ok) continue;
+      const res = (await r.json())?.chart?.result?.[0];
+      if (!res?.timestamp) continue;
+      const q = res.indicators.quote[0];
+      const adj = res.indicators.adjclose?.[0]?.adjclose;
+      const byDay = new Map();
+      for (let i = 0; i < res.timestamp.length; i++) {
+        const c = q.close[i], v = q.volume[i];
+        if (c == null || v == null || !(c > 0) || v < 0) continue;
+        const ts = res.timestamp[i] * 1000;
+        byDay.set(new Date(ts).toISOString().slice(0, 10), {
+          ts, close: c, vol: v, adj: (adj && adj[i] > 0) ? adj[i] : c,
+          high: (withHL && q.high[i] > 0) ? q.high[i] : c, low: (withHL && q.low[i] > 0) ? q.low[i] : c,
+        });
+      }
+      const rows = [...byDay.values()].sort((a, b) => a.ts - b.ts);
+      if (rows.length > 25) return rows;
+    } catch (e) { /* next proxy */ }
+  }
+  return null;
+}
+
+async function fetchSetLive(tickers, target, withHL, label) {
+  let done = 0, ok = 0, idx = 0;
+  async function worker() {
+    while (idx < tickers.length) {
+      const t = tickers[idx++];
+      const rows = await fetchTickerLive(t, withHL);
+      if (rows) { target[t] = rows; ok++; }
+      done++;
+      document.getElementById("loading-msg").textContent = `Fetching ${label} (${done}/${tickers.length})…`;
+    }
+  }
+  await Promise.all([worker(), worker(), worker(), worker(), worker(), worker()]);
+  return ok;
+}
+
+async function loadAll() {
+  // preferred: JSON files committed by the GitHub Action (same-origin, fast)
+  try {
+    const [d, s] = await Promise.all([loadJson("data.json"), loadJson("stocks.json")]);
+    const fresh = j => (Date.now() - Date.parse(j.updated)) / 36e5 < 96;
+    if (fresh(d) && fresh(s)) {
+      for (const [t, rows] of Object.entries(d.series)) if (rows.length > 25) state.etf[t] = rowsFromArr(rows);
+      for (const [t, rows] of Object.entries(s.series)) if (rows.length > 25) state.stocks[t] = rowsFromArr(rows);
+      state.source = "live"; state.updated = s.updated;
+      return;
+    }
+  } catch (e) { /* fall through to live fetch */ }
+  // fallback: live via CORS proxies (slow but works when opened as a bare file)
+  const stockTickers = [...new Set(Object.values(STOCK_UNIVERSE).flatMap(l => l.map(s => s.t)))];
+  const okE = await fetchSetLive(ETF_NEEDED, state.etf, false, "sector ETFs");
+  const okS = await fetchSetLive(stockTickers, state.stocks, true, "stocks");
+  state.source = (okE >= ETF_NEEDED.length * 0.6 && okS >= stockTickers.length * 0.6) ? "live" : "partial";
+}
+
+/* ================= regime bar (same gauges as index.html) ================= */
+const REGIME_RATIOS = [
+  { a:"XLY", b:"XLP", label:"Discr/Staples" }, { a:"SPHB", b:"SPLV", label:"HiBeta/LoVol" },
+  { a:"RSP", b:"SPY", label:"Breadth" }, { a:"SMH", b:"SPY", label:"Semis/S&P" },
+  { a:"IWM", b:"SPY", label:"Small/Large" }, { a:"HYG", b:"LQD", label:"Credit HY/IG" },
+  { a:"HG=F", b:"GC=F", label:"Copper/Gold" },
+];
+function ratioTrend(a, b, lb = 21) {
+  const A = state.etf[a], B = state.etf[b];
+  if (!A || !B) return null;
+  const key = ts => new Date(ts).toISOString().slice(0, 10);
+  const mA = new Map(A.map(r => [key(r.ts), r.adj ?? r.close]));
+  const mB = new Map(B.map(r => [key(r.ts), r.adj ?? r.close]));
+  const common = [...mA.keys()].filter(k => mB.has(k)).sort();
+  if (common.length < lb + 1) return null;
+  const l = common[common.length - 1], p = common[common.length - 1 - lb];
+  return (mA.get(l) / mB.get(l)) / (mA.get(p) / mB.get(p)) - 1;
+}
+let regimeVerdict = null;
+function renderRegime() {
+  let score = 0, max = 0;
+  const chips = [];
+  const chip = (label, val, dir) => {
+    const cls = dir > 0 ? "up" : dir < 0 ? "down" : "flat";
+    const arr = dir > 0 ? "▲" : dir < 0 ? "▼" : "▬";
+    return `<span class="rchip ${cls}"><span class="lbl">${label}</span><span class="arr">${arr}</span><span class="val">${val}</span></span>`;
+  };
+  for (const s of REGIME_RATIOS) {
+    const chg = ratioTrend(s.a, s.b);
+    if (chg == null) continue;
+    const dir = chg > 0.005 ? 1 : chg < -0.005 ? -1 : 0;
+    score += dir; max++;
+    chips.push(chip(s.label, fmtPct(chg), dir));
+  }
+  const vixRows = state.etf["^VIX"];
+  if (vixRows && vixRows.length) {
+    const vix = vixRows[vixRows.length - 1].close;
+    const dir = vix < 18 ? 1 : vix > 24 ? -1 : 0;
+    score += dir; max++;
+    chips.push(chip("VIX", vix.toFixed(1), dir));
+  }
+  const t = state.etf["^TNX"], i = state.etf["^IRX"];
+  if (t && i && t.length && i.length) {
+    const spread = t[t.length - 1].close - i[i.length - 1].close;
+    const dir = spread > 0.2 ? 1 : spread < 0 ? -1 : 0;
+    score += dir; max++;
+    chips.push(chip("Curve 10y−3m", (spread >= 0 ? "+" : "−") + Math.abs(spread * 100).toFixed(0) + "bp", dir));
+  }
+  if (max < 4) return;
+  const frac = score / max;
+  const [verdict, cls] = frac >= 0.35 ? ["RISK-ON", "up"] : frac <= -0.35 ? ["RISK-OFF", "down"] : ["MIXED", "flat"];
+  regimeVerdict = verdict;
+  const overall = document.getElementById("regime-overall");
+  overall.textContent = verdict;
+  overall.className = "rchip overall " + cls;
+  document.getElementById("regime-chips").innerHTML = chips.join("");
+  document.getElementById("regime-wrap").style.display = "";
+}
+
+/* ================= formatting & helpers ================= */
+const fmtPct = v => v == null ? "–" : (v >= 0 ? "+" : "") + (v * 100).toFixed(1) + "%";
+const fmtPct2 = v => v == null ? "–" : (v >= 0 ? "+" : "") + (v * 100).toFixed(2) + "%";
+const fmtM = v => { const a = Math.abs(v); return (v < 0 ? "−$" : "+$") + (a >= 1000 ? (a / 1000).toFixed(1) + "B" : a.toFixed(0) + "M"); };
+const fmtPx = v => v >= 1000 ? v.toFixed(0) : v.toFixed(2);
+const cls = v => v == null ? "mut" : v >= 0 ? "pos" : "neg";
+const esc = s => s.replace(/&/g, "&amp;").replace(/</g, "&lt;");
+const scoreColor = s => s >= 70 ? "var(--green)" : s >= 50 ? "var(--blue)" : s >= 35 ? "var(--amber)" : "var(--red)";
+
+const WATCH_KEY = "mft-watchlist";
+let watchlist = new Set(JSON.parse(localStorage.getItem(WATCH_KEY) || "[]"));
+const saveWatch = () => localStorage.setItem(WATCH_KEY, JSON.stringify([...watchlist]));
+
+let model = null;
+
+const leaderSectors = () => new Set(model.secList
+  .filter(s => (s.rrg && (s.rrg.quad === "Leading" || s.rrg.quad === "Improving")) || s.rank <= 5)
+  .map(s => s.t));
+
+/* ================= rendering ================= */
+function renderSectors() {
+  const el = document.getElementById("sector-strip");
+  el.innerHTML = model.secList.map(s => {
+    const quad = s.rrg ? s.rrg.quad : "–";
+    return `<div class="sec-card r${s.rank} ${state.sector === s.t ? "selected" : ""}" data-sec="${s.t}">
+      <span class="rank">#${s.rank}</span>
+      <div class="nm">${SECTOR_NAMES[s.t]} <span class="tk">${s.t}</span></div>
+      <span class="quad q-${quad}">${quad.toUpperCase()}</span>
+      <div class="mets">1m vs SPY <b class="${cls(s.ex21)}">${fmtPct(s.ex21)}</b> · 3m <b class="${cls(s.ex63)}">${fmtPct(s.ex63)}</b><br>
+      Flow <b class="${cls(s.flow)}">${s.flow == null ? "–" : fmtM(s.flow) + "/d"}</b></div>
+    </div>`;
+  }).join("");
+  el.querySelectorAll(".sec-card").forEach(c => c.addEventListener("click", () => {
+    state.sector = state.sector === c.dataset.sec ? null : c.dataset.sec;
+    state.open = null;
+    renderSectors(); renderTable();
+  }));
+}
+
+function renderBreadth() {
+  const b = model.breadth;
+  const pct = v => (v * 100).toFixed(0) + "%";
+  const stat = (k, v, good) => `<div class="stat"><div class="k">${k}</div><div class="v" style="color:${good ? "var(--green)" : "var(--red)"}">${v}</div></div>`;
+  document.getElementById("breadth-grid").innerHTML =
+    stat("Above 20d SMA", pct(b.pctAbove20), b.pctAbove20 >= 0.5) +
+    stat("Above 50d SMA", pct(b.pctAbove50), b.pctAbove50 >= 0.5) +
+    stat("Advancers today", pct(b.advancers), b.advancers >= 0.5) +
+    stat("Within 5% of 52wH", pct(b.near52), b.near52 >= 0.3);
+  const healthy = b.pctAbove50 >= 0.6 && b.pctAbove20 >= 0.5;
+  const weak = b.pctAbove50 < 0.4;
+  document.getElementById("breadth-verdict").innerHTML =
+    `Median 1-month return: <b class="${cls(b.medRet21)}">${fmtPct(b.medRet21)}</b>. ` +
+    (healthy ? `<b style="color:var(--green)">Broad participation</b> — breakouts and momentum entries have the wind behind them.`
+      : weak ? `<b style="color:var(--red)">Weak breadth</b> — most stocks are below their 50-day average; momentum entries fail more often here. Smaller size, tighter stops.`
+      : `<b style="color:var(--amber)">Mixed breadth</b> — be selective; favor only the strongest sectors.`) +
+    (regimeVerdict && regimeVerdict !== "RISK-ON" ? ` Regime is <b>${regimeVerdict}</b> — confirmation matters more than usual.` : "");
+}
+
+function riskParams() {
+  const acct = +document.getElementById("acct").value || 0;
+  const rp = (+document.getElementById("riskpct").value || 0) / 100;
+  return { acct, riskDollar: acct * rp };
+}
+
+function stopAndSize(s) {
+  if (s.atr == null) return null;
+  const stopDist = 2 * s.atr;
+  const stop = s.price - stopDist;
+  const { riskDollar } = riskParams();
+  const shares = stopDist > 0 ? Math.floor(riskDollar / stopDist) : 0;
+  return { stop, stopDist, shares, riskDollar };
+}
+
+function renderPicks() {
+  const lead = leaderSectors();
+  const picks = model.stocks.filter(s => lead.has(s.sector)).slice(0, 5);
+  document.getElementById("picks").innerHTML = picks.map(s => {
+    const sp = stopAndSize(s);
+    return `<div class="pick" data-t="${s.t}">
+      <div class="top"><span class="tk">${s.t}</span><span class="score-badge" style="color:${scoreColor(s.score)};background:transparent;border:1px solid ${scoreColor(s.score)}">${s.score.toFixed(0)}</span></div>
+      <div class="nm">${esc(s.n)} · ${SECTOR_NAMES[s.sector]}</div>
+      <div class="mets">1m <b class="${cls(s.ret21)}">${fmtPct(s.ret21)}</b> · vs sector <b class="${cls(s.rs21)}">${fmtPct(s.rs21)}</b><br>
+      MFI <b>${s.mfi == null ? "–" : s.mfi.toFixed(0)}</b> · OBV <b class="${cls(s.obvT)}">${s.obvT == null ? "–" : (s.obvT >= 0 ? "+" : "") + s.obvT.toFixed(1)}d</b><br>
+      ${sp ? `Stop ~<b>$${fmtPx(sp.stop)}</b> · Size <b>${sp.shares}</b> sh` : ""}</div>
+    </div>`;
+  }).join("") || '<div class="hint">No leading-sector stocks available.</div>';
+  document.querySelectorAll("#picks .pick").forEach(c => c.addEventListener("click", () => {
+    state.filter = "all"; state.sector = null; state.open = c.dataset.t;
+    document.querySelectorAll("#filter-seg button").forEach(b => b.classList.toggle("active", b.dataset.f === "all"));
+    renderSectors(); renderTable();
+    document.querySelector(`tr[data-t="${c.dataset.t}"]`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }));
+}
+
+function sparkSvg(vals, w = 240, h = 60) {
+  if (!vals || vals.length < 2) return "";
+  const min = Math.min(...vals), max = Math.max(...vals), span = max - min || 1;
+  const pts = vals.map((v, i) => `${(i / (vals.length - 1) * w).toFixed(1)},${(h - 4 - (v - min) / span * (h - 8)).toFixed(1)}`);
+  const up = vals[vals.length - 1] >= vals[0];
+  // 20-day SMA overlay
+  const smaPts = [];
+  for (let i = 19; i < vals.length; i++) {
+    let s = 0; for (let j = i - 19; j <= i; j++) s += vals[j];
+    smaPts.push(`${(i / (vals.length - 1) * w).toFixed(1)},${(h - 4 - (s / 20 - min) / span * (h - 8)).toFixed(1)}`);
+  }
+  return `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">
+    <polyline points="${smaPts.join(" ")}" fill="none" stroke="var(--muted)" stroke-width="1" opacity="0.6"/>
+    <polyline points="${pts.join(" ")}" fill="none" stroke="${up ? "var(--green)" : "var(--red)"}" stroke-width="1.6"/>
+  </svg>`;
+}
+
+function visibleStocks() {
+  let list = model.stocks;
+  if (state.sector) list = list.filter(s => s.sector === state.sector);
+  else if (state.filter === "leaders") { const lead = leaderSectors(); list = list.filter(s => lead.has(s.sector)); }
+  else if (state.filter === "watch") list = list.filter(s => watchlist.has(s.t));
+  // sortDir -1 = the default click: descending for numbers, A→Z for text, flagged/starred first
+  const k = state.sortK, d = state.sortDir;
+  return [...list].sort((a, b) => {
+    if (k === "t") return d === -1 ? a.t.localeCompare(b.t) : b.t.localeCompare(a.t);
+    if (k === "sector") return d === -1 ? a.sector.localeCompare(b.sector) : b.sector.localeCompare(a.sector);
+    if (k === "star") return -d * ((watchlist.has(b.t) ? 1 : 0) - (watchlist.has(a.t) ? 1 : 0));
+    if (k === "flags") return -d * ((b.flagAcc + b.flagVol + b.flagHi) - (a.flagAcc + a.flagVol + a.flagHi));
+    const va = a[k], vb = b[k];
+    if (va == null) return 1; if (vb == null) return -1;
+    return -d * (vb - va);
+  });
+}
+
+function flagsHtml(s) {
+  let h = "";
+  if (s.flagAcc) h += '<span class="flag f-acc" title="Accumulation: price fell over 1m but OBV rose — someone is buying the dip">ACC</span>';
+  if (s.flagDist) h += '<span class="flag f-dist" title="Distribution: price rose but OBV fell — the rally is being sold into">DIST</span>';
+  if (s.flagVol) h += `<span class="flag f-vol" title="Volume today is ${s.unusualVol.toFixed(1)}× its 3-month average">VOL</span>`;
+  if (s.flagHi) h += '<span class="flag f-hi" title="Within 2% of its 52-week high">HI</span>';
+  return h;
+}
+
+function renderTable() {
+  const list = visibleStocks();
+  document.getElementById("table-title").textContent =
+    `Momentum Screener — ${state.sector ? SECTOR_NAMES[state.sector] : state.filter === "leaders" ? "leading sectors" : state.filter === "watch" ? "watchlist" : "all sectors"} (${list.length})`;
+  const tb = document.getElementById("tbody");
+  tb.innerHTML = list.map(s => {
+    const sec = model.sectors[s.sector];
+    const quad = sec && sec.rrg ? sec.rrg.quad : "–";
+    const main = `<tr class="stock-row" data-t="${s.t}">
+      <td class="l"><span class="star ${watchlist.has(s.t) ? "on" : ""}" data-t="${s.t}">&#9733;</span></td>
+      <td class="l tk-cell">${s.t}<span class="mut" style="font-weight:400"> ${esc(s.n)}</span></td>
+      <td class="l"><span class="sec-chip q-${quad}">${s.sector}</span></td>
+      <td><span class="scorebar"><span class="bb"><span class="bf" style="width:${s.score.toFixed(0)}%;background:${scoreColor(s.score)}"></span></span><b style="color:${scoreColor(s.score)}">${s.score.toFixed(0)}</b></span></td>
+      <td>$${fmtPx(s.price)}</td>
+      <td class="${cls(s.chg1d)}">${fmtPct2(s.chg1d)}</td>
+      <td class="${cls(s.ret21)}">${fmtPct(s.ret21)}</td>
+      <td class="${cls(s.rs21)}">${fmtPct(s.rs21)}</td>
+      <td class="${cls(s.rs63)}">${fmtPct(s.rs63)}</td>
+      <td class="${s.mfi >= 80 ? "pos" : s.mfi <= 20 ? "neg" : ""}">${s.mfi == null ? "–" : s.mfi.toFixed(0)}</td>
+      <td class="${cls(s.obvT)}">${s.obvT == null ? "–" : (s.obvT >= 0 ? "+" : "") + s.obvT.toFixed(1)}</td>
+      <td class="${cls(s.flow21)}">${s.flow21 == null ? "–" : fmtM(s.flow21)}</td>
+      <td>${s.volX == null ? "–" : s.volX.toFixed(2)}</td>
+      <td>${s.prox52 == null ? "–" : (s.prox52 * 100).toFixed(0) + "%"}</td>
+      <td class="l">${flagsHtml(s)}</td>
+    </tr>`;
+    if (state.open !== s.t) return main;
+    const sp = stopAndSize(s);
+    const posValue = sp ? sp.shares * s.price : 0;
+    return main + `<tr class="detail"><td colspan="15"><div class="detail-grid">
+      <div>${sparkSvg(s.spark)}<div class="mut" style="font-size:11px;margin-top:2px">90 trading days, adjusted close + 20d SMA</div></div>
+      <div style="display:flex;gap:28px;flex-wrap:wrap">
+        <dl>
+          <dt>ATR(14)</dt><dd>$${s.atr == null ? "–" : s.atr.toFixed(2)} (${s.atr == null ? "–" : (s.atr / s.price * 100).toFixed(1)}%/day)</dd>
+          <dt>Suggested stop (2×ATR)</dt><dd><b>$${sp ? fmtPx(sp.stop) : "–"}</b> (−${sp ? (sp.stopDist / s.price * 100).toFixed(1) : "–"}%)</dd>
+          <dt>Position size @ risk $${sp ? sp.riskDollar.toFixed(0) : "–"}</dt><dd><b>${sp ? sp.shares : "–"} shares</b> ≈ $${posValue.toFixed(0)}</dd>
+          <dt>Avg $ volume (21d)</dt><dd>${s.avgDollarVol == null ? "–" : "$" + (s.avgDollarVol / 1e6).toFixed(0) + "M/day"}</dd>
+        </dl>
+        <dl>
+          <dt>1w / 1m / 3m</dt><dd class="${cls(s.ret63)}">${fmtPct(s.ret5)} / ${fmtPct(s.ret21)} / ${fmtPct(s.ret63)}</dd>
+          <dt>Sector (${s.sector})</dt><dd>${quad} · rank #${sec ? sec.rank : "–"} · flow ${sec && sec.flow != null ? fmtM(sec.flow) + "/d" : "–"}</dd>
+          <dt>Trend filters</dt><dd>${s.aboveS20 ? "✓" : "✗"} above 20d · ${s.aboveS50 ? "✓" : "✗"} above 50d</dd>
+          <dt>Volume today vs norm</dt><dd>${s.unusualVol == null ? "–" : s.unusualVol.toFixed(1) + "×"}</dd>
+        </dl>
+      </div>
+    </div></td></tr>`;
+  }).join("");
+  tb.querySelectorAll(".star").forEach(el => el.addEventListener("click", e => {
+    e.stopPropagation();
+    const t = el.dataset.t;
+    watchlist.has(t) ? watchlist.delete(t) : watchlist.add(t);
+    saveWatch();
+    el.classList.toggle("on", watchlist.has(t));
+    if (state.filter === "watch") renderTable();
+  }));
+  tb.querySelectorAll("tr.stock-row").forEach(tr => tr.addEventListener("click", () => {
+    state.open = state.open === tr.dataset.t ? null : tr.dataset.t;
+    renderTable();
+  }));
+}
+
+function renderAll() {
+  renderRegime();
+  renderSectors();
+  renderBreadth();
+  renderPicks();
+  renderTable();
+}
+
+/* ================= wiring ================= */
+document.getElementById("filter-seg").addEventListener("click", e => {
+  if (!e.target.dataset.f) return;
+  state.filter = e.target.dataset.f;
+  state.sector = null; state.open = null;
+  document.querySelectorAll("#filter-seg button").forEach(b => b.classList.toggle("active", b === e.target));
+  renderSectors(); renderTable();
+});
+document.querySelectorAll("#screener th").forEach(th => th.addEventListener("click", () => {
+  const k = th.dataset.k;
+  if (state.sortK === k) state.sortDir *= -1; else { state.sortK = k; state.sortDir = -1; }
+  document.querySelectorAll("#screener th").forEach(t2 => {
+    t2.classList.toggle("sorted", t2 === th);
+    t2.innerHTML = t2.innerHTML.replace(/ [↓↑]$|( &darr;| &uarr;)$/g, "");
+  });
+  th.innerHTML += state.sortDir < 0 ? " ↓" : " ↑";
+  renderTable();
+}));
+for (const id of ["acct", "riskpct"]) {
+  const el = document.getElementById(id);
+  el.value = localStorage.getItem("mft-" + id) || el.value;
+  el.addEventListener("change", () => { localStorage.setItem("mft-" + id, el.value); renderPicks(); renderTable(); });
+}
+
+(async function init() {
+  await loadAll();
+  model = buildModel(state.stocks, STOCK_UNIVERSE, state.etf);
+  document.getElementById("loading").style.display = "none";
+  const badge = document.getElementById("status");
+  if (!model.stocks.length) {
+    badge.textContent = "● no data"; badge.className = "badge sample";
+    document.getElementById("content").style.display = "flex";
+    document.getElementById("tbody").innerHTML = '<tr><td colspan="15" class="l mut">Could not load stock data. Host this page with the GitHub Action (stocks.json), or check your connection.</td></tr>';
+    return;
+  }
+  badge.textContent = `● live · ${model.stocks.length} stocks`;
+  badge.className = "badge live";
+  if (state.updated) document.getElementById("updated").textContent =
+    "Data updated " + new Date(state.updated).toLocaleString("en-GB", { timeZone: "Asia/Bangkok", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) + " GMT+7";
+  document.getElementById("content").style.display = "flex";
+  renderAll();
+})();
+</script>
+</body>
+</html>
