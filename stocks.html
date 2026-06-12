@@ -15,7 +15,11 @@
   header { padding: 18px 24px 0; display: flex; flex-wrap: wrap; align-items: center; gap: 14px; }
   h1 { font-size: 20px; font-weight: 700; letter-spacing: -0.3px; }
   h1 .sub { color: var(--muted); font-weight: 400; font-size: 13px; margin-left: 10px; }
-  header a { color: var(--blue); font-size: 13px; text-decoration: none; }
+  .nav { display: inline-flex; background: var(--panel); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  .nav a { color: var(--muted); padding: 8px 18px; font-size: 13px; font-weight: 600; text-decoration: none; border-right: 1px solid var(--border); white-space: nowrap; }
+  .nav a:last-child { border-right: none; }
+  .nav a.active { background: var(--blue); color: #fff; }
+  .nav a:hover:not(.active) { color: var(--text); background: var(--panel2); }
   .badge { font-size: 11px; padding: 3px 10px; border-radius: 12px; border: 1px solid var(--border); color: var(--muted); }
   .badge.live { color: var(--green); border-color: var(--green); }
   .badge.sample { color: var(--amber); border-color: var(--amber); }
@@ -117,9 +121,12 @@
 <body>
 <header>
   <h1>Stock Picker<span class="sub">momentum candidates from money flow &times; sector rotation</span></h1>
+  <nav class="nav">
+    <a href="index.html">Flow Tracker</a>
+    <a href="stocks.html" class="active">Stock Picker</a>
+    <a href="assets.html">Asset Guide</a>
+  </nav>
   <span id="status" class="badge">loading…</span>
-  <a href="index.html">&larr; Flow Tracker</a>
-  <a href="assets.html">Asset Guide &rarr;</a>
   <span id="updated"></span>
 </header>
 
