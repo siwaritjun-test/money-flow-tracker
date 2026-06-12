@@ -92,6 +92,11 @@ try {
   const share = soc.themes.reduce((s, t) => s + t.score, 0);
   check(share >= 90 && share <= 105, `social: chatter shares sum ≈100 (${share})`);
   check(soc.daily.length >= 1 && !!soc.daily[soc.daily.length - 1].name, `social: daily winner finalized (${soc.daily[soc.daily.length - 1].name})`);
+  check(soc.themes.every(t => Array.isArray(t.subs) && t.subs.length >= 2), "social: every theme has a supply chain (≥2 segments)");
+  const ai = soc.themes.find(t => t.id === "ai-semis");
+  check(ai && ai.subs.length >= 5, `social: AI supply chain has ${ai ? ai.subs.length : 0} segments`);
+  check(soc.themes.every(t => t.subs.every(s => s.share >= 0 && s.share <= 100)), "social: sub shares within 0–100");
+  check(soc.themes.every(t => t.subs.every((s, i, a) => i === 0 || a[i - 1].raw >= s.raw)), "social: subs sorted by chatter");
 } catch (e) { console.log("(social.json not present — social checks skipped)"); }
 
 console.log("\n--- Sector ranking (1m+3m excess vs SPY) ---");

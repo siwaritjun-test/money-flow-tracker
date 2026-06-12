@@ -102,6 +102,10 @@ const puppeteer = require("puppeteer-core");
   await page.click("#leaderboard .lb-row");
   const detail = await page.$(".lb-detail");
   detail ? pass("theme row expands with examples/tickers") : fail("theme detail did not expand");
+  const scCards = await page.$$eval(".sc-card", c => c.length);
+  scCards >= 2 ? pass(`supply chain renders ${scCards} segments`) : fail("supply-chain segments missing in detail");
+  const heroSC = await page.$eval("#hero-mets", el => el.innerText.includes("Supply chain"));
+  heroSC ? pass("hero shows supply-chain callout") : fail("hero missing supply-chain callout");
 
   // 10) deep link: themes → stocks.html?q=NVDA pre-fills search
   await page.goto("http://localhost:8123/stocks.html?q=NVDA", { waitUntil: "networkidle2", timeout: 60000 });

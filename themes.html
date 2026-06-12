@@ -56,6 +56,16 @@
   .lb-detail { background: var(--panel2); border-radius: 8px; padding: 12px 14px; margin: 4px 0 8px; font-size: 12.5px; }
   .lb-detail .ex { color: var(--muted); margin: 3px 0; line-height: 1.45; }
   .lb-detail .ex b { color: var(--text); font-weight: 600; }
+  .sc-title { font-size: 11px; text-transform: uppercase; letter-spacing: .8px; color: var(--muted); margin: 12px 0 6px; }
+  .sc-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 8px; }
+  .sc-card { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 9px 11px; }
+  .sc-card .nm { font-size: 12px; font-weight: 700; display: flex; justify-content: space-between; gap: 8px; }
+  .sc-card .nm .sh { color: var(--blue); font-variant-numeric: tabular-nums; }
+  .sc-bar { height: 5px; background: var(--panel2); border-radius: 3px; overflow: hidden; margin: 6px 0; }
+  .sc-bar span { display: block; height: 100%; background: var(--blue); border-radius: 3px; }
+  .sc-card .m { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .sc-card .tk { font-size: 10.5px; margin-top: 4px; }
+  .sc-card .tk a { color: var(--blue); text-decoration: none; margin-right: 6px; font-weight: 600; }
   @media (max-width: 900px) { .lb-row { grid-template-columns: 22px 1fr 70px 80px; } .lb-row .hide-sm { display: none; } }
   /* two-col bottom */
   .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
@@ -153,10 +163,32 @@ function renderHero(t) {
     `<span>1M basket <b class="${cls(t.basketRet1m)}">${fmtPct(t.basketRet1m)}</b> vs SPY <b class="${cls(S.spyRet1m)}">${fmtPct(S.spyRet1m)}</b></span>` +
     (t.momentum != null ? `<span>Chatter vs prev. snapshot <b class="${cls(t.momentum)}">${t.momentum >= 0 ? "+" : ""}${t.momentum}</b></span>` : "") +
     `<span>Sources: <b>${t.sources.reddit ? "Reddit " : ""}${t.sources.news ? "News " : ""}${t.sources.buzz ? "Ticker-buzz" : ""}</b></span>`;
+  // supply-chain callout: where chatter sits vs which segment is winning on price
+  if (t.subs && t.subs.length) {
+    const byRet = [...t.subs].filter(s => s.basketRet1m != null).sort((a, b) => b.basketRet1m - a.basketRet1m);
+    const hot = t.subs[0], best = byRet[0];
+    document.getElementById("hero-mets").innerHTML +=
+      `<span style="flex-basis:100%">Supply chain: most chatter in <b>${hot.name}</b> (${hot.share}%)` +
+      (best ? ` · best 1M price in <b>${best.name}</b> <b class="${cls(best.basketRet1m)}">${fmtPct(best.basketRet1m)}</b>` : "") +
+      ` — click the theme below for the full chain</span>`;
+  }
   document.getElementById("hero-tickers").innerHTML =
     (t.topTickers.length ? t.topTickers : t.tickers.slice(0, 8)).map(x => `<a class="chip" href="stocks.html?q=${x}" title="Open ${x} in the Stock Picker">${x}</a>`).join("");
   document.getElementById("hero-examples").innerHTML =
     t.examples.slice(0, 3).map(e => `“${esc(e.title)}” <span style="opacity:.7">— ${esc(e.src)}</span>`).join("<br>");
+}
+
+function supplyChainHtml(t) {
+  if (!t.subs || !t.subs.length) return "";
+  const max = Math.max(...t.subs.map(s => s.share)) || 1;
+  return `<div class="sc-title">Supply chain — where the chatter sits (share of theme) vs how each segment trades (1M)</div>
+  <div class="sc-grid">` + t.subs.map(s => `
+    <div class="sc-card">
+      <div class="nm"><span>${s.name}</span><span class="sh">${s.share}%</span></div>
+      <div class="sc-bar"><span style="width:${(s.share / max * 100).toFixed(0)}%"></span></div>
+      <div class="m">1M basket <b class="${cls(s.basketRet1m)}">${fmtPct(s.basketRet1m)}</b></div>
+      <div class="tk">${s.tickers.slice(0, 5).map(x => `<a href="stocks.html?q=${x}">${x}</a>`).join("")}</div>
+    </div>`).join("") + `</div>`;
 }
 
 function renderLeaderboard() {
@@ -173,7 +205,8 @@ function renderLeaderboard() {
     </div>`;
     if (openId !== t.id) return row;
     return row + `<div class="lb-detail">
-      ${t.examples.length ? t.examples.map(e => `<div class="ex">“${esc(e.title)}” — <b>${esc(e.src)}</b></div>`).join("") : '<div class="ex">No sample posts captured this cycle — score driven by ticker-level buzz.</div>'}
+      ${supplyChainHtml(t)}
+      ${t.examples.length ? `<div class="sc-title">Sample posts &amp; headlines</div>` + t.examples.map(e => `<div class="ex">“${esc(e.title)}” — <b>${esc(e.src)}</b></div>`).join("") : '<div class="ex" style="margin-top:8px">No sample posts captured this cycle — score driven by ticker-level buzz.</div>'}
       <div class="chips" style="margin-top:8px">${t.tickers.map(x => `<a class="chip" href="stocks.html?q=${x}">${x}</a>`).join("")}</div>
     </div>`;
   }).join("");

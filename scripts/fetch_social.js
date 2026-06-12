@@ -22,24 +22,100 @@ const ROOT = path.join(__dirname, "..");
 const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36";
 const MIN_AGE_H = 11; // self-skip window
 
-/* ---------------- theme dictionary ---------------- */
+/* ---------------- theme dictionary ----------------
+   Each theme also defines its supply chain as `subs` (upstream → downstream).
+   Sub-segments are scored from the same posts/headlines/ticker-buzz and get
+   their own 1-month basket, so you can see WHERE in the chain attention sits. */
 const THEMES = [
-  { id: "ai-semis", name: "AI & Semiconductors", kw: ["artificial intelligence", " ai ", "ai bubble", "ai capex", "ai spending", "chip", "semiconductor", "gpu", "datacenter", "data center", "nvidia", "openai", "anthropic", "llm", "blackwell", "foundry"], tickers: ["NVDA","AMD","AVGO","TSM","MU","INTC","ARM","SMCI","MRVL","ASML","AMAT","LRCX","KLAC","SNDK","WDC","MSFT","ORCL","PLTR","CRWV"] },
-  { id: "datacenter-power", name: "Data-Center Power & Grid", kw: ["power demand", "electricity demand", "grid", "utility", "megawatt", "gigawatt", "power purchase", "energy for ai", "cooling"], tickers: ["VST","CEG","ETN","VRT","PWR","NEE","GEV","TLN","SO","D"] },
-  { id: "nuclear", name: "Nuclear & Uranium", kw: ["nuclear", "uranium", "reactor", "smr ", "small modular", "enrichment", "fission"], tickers: ["CCJ","OKLO","SMR","LEU","CEG","UEC","NNE","BWXT"] },
-  { id: "glp1", name: "GLP-1 / Obesity Drugs", kw: ["glp-1", "ozempic", "wegovy", "zepbound", "obesity drug", "weight loss drug", "weight-loss"], tickers: ["LLY","NVO","VKTX","HIMS","AMGN","PFE"] },
-  { id: "defense", name: "Defense & Geopolitics", kw: ["defense", "defence", "missile", "drone", "nato", "ukraine", "israel", "iran", "taiwan", "military", "war ", "geopolit"], tickers: ["LMT","RTX","NOC","GD","LHX","AVAV","KTOS","PLTR","RHM","BA"] },
-  { id: "crypto", name: "Crypto & Digital Assets", kw: ["bitcoin", "btc", "ethereum", "crypto", "stablecoin", "blockchain", "halving", "etf inflow"], tickers: ["COIN","MSTR","HOOD","MARA","RIOT","CLSK","GLXY","CRCL","BMNR"] },
-  { id: "rates-fed", name: "Fed, Rates & Inflation", kw: ["fed ", "federal reserve", "rate cut", "rate hike", "fomc", "powell", "inflation", "cpi ", "pce ", "treasury yield", "bond yield", "soft landing", "recession"], tickers: ["TLT","JPM","BAC","GS","MS","SCHW","KRE"] },
-  { id: "quantum", name: "Quantum Computing", kw: ["quantum"], tickers: ["IONQ","RGTI","QBTS","IBM","GOOGL"] },
-  { id: "ev-autonomous", name: "EV & Autonomous Driving", kw: ["electric vehicle", " ev ", "robotaxi", "self-driving", "autonomous", "fsd", "lidar", "charging"], tickers: ["TSLA","RIVN","LCID","UBER","GM","F","XPEV","NIO","MBLY"] },
-  { id: "robotics", name: "Robotics & Humanoids", kw: ["robot", "humanoid", "automation", "optimus", "figure ai"], tickers: ["TSLA","NVDA","ROK","ISRG","TER","SYM"] },
-  { id: "space", name: "Space Economy", kw: ["space", "rocket", "satellite", "starlink", "spacex", "launch", "orbit"], tickers: ["RKLB","ASTS","LUNR","RDW","BA","PL"] },
-  { id: "energy-oil", name: "Oil & Gas", kw: ["oil price", "crude", "opec", "natural gas", "natgas", "lng", "barrel", "drilling"], tickers: ["XOM","CVX","OXY","COP","SLB","HAL","EOG","FANG","LNG"] },
-  { id: "gold-havens", name: "Gold & Safe Havens", kw: ["gold price", "gold hits", "gold rally", "silver", "safe haven", "bullion", "precious metal"], tickers: ["GLD","NEM","GOLD","AEM","WPM","SLV","FNV"] },
-  { id: "housing", name: "Housing & Homebuilders", kw: ["housing", "mortgage rate", "homebuilder", "home sales", "real estate market", "rent"], tickers: ["DHI","LEN","PHM","NVR","TOL","HD","LOW"] },
-  { id: "biotech", name: "Biotech & FDA Catalysts", kw: ["fda approval", "fda ", "biotech", "clinical trial", "phase 3", "drug approval", "gene therapy", "obesity pill"], tickers: ["XBI","AMGN","GILD","VRTX","REGN","MRNA","CRSP","SRPT"] },
-  { id: "meme-retail", name: "Meme / Retail Squeeze", kw: ["short squeeze", "meme stock", "yolo", "diamond hands", "short interest", "gamma squeeze", "to the moon"], tickers: ["GME","AMC","BBAI","DJT","OPEN","BYND"] },
+  { id: "ai-semis", name: "AI & Semiconductors", kw: ["artificial intelligence", " ai ", "ai bubble", "ai capex", "ai spending", "chip", "semiconductor", "gpu", "datacenter", "data center", "nvidia", "openai", "anthropic", "llm", "blackwell", "foundry"], tickers: ["NVDA","AMD","AVGO","TSM","MU","INTC","ARM","SMCI","MRVL","ASML","AMAT","LRCX","KLAC","SNDK","WDC","MSFT","ORCL","PLTR","CRWV"], subs: [
+    { id: "materials", name: "Rare Earth & Materials", kw: ["rare earth", "neodymium", "gallium", "germanium", "wafer", "polysilicon", "silicon carbide", "export control"], tickers: ["MP","USAR","UUUU","FCX","TMC"] },
+    { id: "equipment", name: "Fab Equipment", kw: ["lithography", "euv", "etch", "deposition", "fab equipment", "wafer fab"], tickers: ["ASML","AMAT","LRCX","KLAC","TER"] },
+    { id: "chips", name: "Chip Design & Foundry", kw: ["gpu", "foundry", "accelerator", "asic", "tapeout", "node", "tsmc"], tickers: ["NVDA","AMD","AVGO","TSM","INTC","ARM","MRVL","QCOM"] },
+    { id: "memory", name: "Memory & Storage", kw: ["hbm", "dram", "nand", "memory chip", "high bandwidth memory", "flash", "ssd"], tickers: ["MU","SNDK","WDC","STX"] },
+    { id: "infra", name: "Servers & Networking", kw: ["server", "rack", "networking", "interconnect", "optical", "switch"], tickers: ["SMCI","DELL","ANET","VRT","CSCO","CIEN"] },
+    { id: "apps", name: "AI Applications", kw: ["copilot", "chatbot", "chatgpt", "gemini", "ai software", "ai agent", "inference", "ai cloud"], tickers: ["MSFT","GOOGL","META","ORCL","PLTR","CRM","NOW","CRWV"] },
+  ]},
+  { id: "datacenter-power", name: "Data-Center Power & Grid", kw: ["power demand", "electricity demand", "grid", "utility", "megawatt", "gigawatt", "power purchase", "energy for ai", "cooling"], tickers: ["VST","CEG","ETN","VRT","PWR","NEE","GEV","TLN","SO","D"], subs: [
+    { id: "generation", name: "Power Generation", kw: ["power plant", "gas turbine", "ppa", "power purchase", "independent power"], tickers: ["VST","CEG","TLN","NEE","SO","D"] },
+    { id: "grid", name: "Grid & Electrical Equipment", kw: ["transformer", "switchgear", "grid equipment", "electrification", "turbine order"], tickers: ["ETN","PWR","GEV","HUBB"] },
+    { id: "cooling", name: "Cooling & DC Infrastructure", kw: ["liquid cooling", "cooling", "hvac", "thermal"], tickers: ["VRT","JCI","TT","NVT"] },
+    { id: "dc-reits", name: "Data-Center REITs", kw: ["data center reit", "colocation", "hyperscale lease"], tickers: ["DLR","EQIX","IRM"] },
+  ]},
+  { id: "nuclear", name: "Nuclear & Uranium", kw: ["nuclear", "uranium", "reactor", "smr ", "small modular", "enrichment", "fission"], tickers: ["CCJ","OKLO","SMR","LEU","CEG","UEC","NNE","BWXT"], subs: [
+    { id: "mining", name: "Uranium Mining", kw: ["uranium mine", "u3o8", "uranium price", "spot uranium"], tickers: ["CCJ","UEC","DNN","NXE","UUUU"] },
+    { id: "fuel", name: "Enrichment & Fuel", kw: ["enrichment", "haleu", "nuclear fuel"], tickers: ["LEU","BWXT"] },
+    { id: "reactors", name: "Reactors & SMR Builders", kw: ["smr", "small modular", "reactor design", "new reactor"], tickers: ["OKLO","SMR","NNE","BWXT","GEV"] },
+    { id: "operators", name: "Plant Operators", kw: ["nuclear plant", "restart", "nuclear power deal"], tickers: ["CEG","VST","TLN","DUK"] },
+  ]},
+  { id: "glp1", name: "GLP-1 / Obesity Drugs", kw: ["glp-1", "ozempic", "wegovy", "zepbound", "obesity drug", "weight loss drug", "weight-loss"], tickers: ["LLY","NVO","VKTX","HIMS","AMGN","PFE"], subs: [
+    { id: "pharma", name: "Drug Makers", kw: ["ozempic", "wegovy", "zepbound", "orforglipron", "obesity pill", "trial data"], tickers: ["LLY","NVO","AMGN","PFE","VKTX"] },
+    { id: "supply", name: "Manufacturing & Devices", kw: ["fill-finish", "syringe", "auto-injector", "cdmo", "capacity"], tickers: ["TMO","WST","CRL"] },
+    { id: "channel", name: "Telehealth & Distribution", kw: ["telehealth", "compounded", "pharmacy"], tickers: ["HIMS","CVS","MCK"] },
+  ]},
+  { id: "defense", name: "Defense & Geopolitics", kw: ["defense", "defence", "missile", "drone", "nato", "ukraine", "israel", "iran", "taiwan", "military", "war ", "geopolit"], tickers: ["LMT","RTX","NOC","GD","LHX","AVAV","KTOS","PLTR","BA"], subs: [
+    { id: "primes", name: "Prime Contractors", kw: ["contract award", "pentagon", "procurement", "missile defense"], tickers: ["LMT","RTX","NOC","GD","LHX"] },
+    { id: "drones", name: "Drones & Defense AI", kw: ["drone", "uav", "counter-uas", "autonomous weapons", "battlefield ai"], tickers: ["AVAV","KTOS","PLTR","ONDS"] },
+    { id: "components", name: "Aerospace Components", kw: ["aerospace parts", "aftermarket", "engine parts"], tickers: ["HEI","TDG","CW"] },
+    { id: "ships", name: "Ships & Munitions", kw: ["shipbuilding", "submarine", "ammunition", "munitions", "artillery"], tickers: ["HII","GD","BA"] },
+  ]},
+  { id: "crypto", name: "Crypto & Digital Assets", kw: ["bitcoin", "btc", "ethereum", "crypto", "stablecoin", "blockchain", "halving", "etf inflow"], tickers: ["COIN","MSTR","HOOD","MARA","RIOT","CLSK","GLXY","CRCL","BMNR"], subs: [
+    { id: "exchanges", name: "Exchanges & Brokers", kw: ["exchange volume", "trading app", "listing"], tickers: ["COIN","HOOD","GLXY"] },
+    { id: "treasuries", name: "Treasury Holders", kw: ["bitcoin treasury", "btc holdings", "accumulation strategy"], tickers: ["MSTR","BMNR"] },
+    { id: "miners", name: "Miners", kw: ["miner", "hashrate", "mining difficulty", "ai pivot"], tickers: ["MARA","RIOT","CLSK","CIFR"] },
+    { id: "stablecoins", name: "Stablecoins & Payments", kw: ["stablecoin", "usdc", "genius act", "payments rail"], tickers: ["CRCL","PYPL","V","MA"] },
+  ]},
+  { id: "rates-fed", name: "Fed, Rates & Inflation", kw: ["fed ", "federal reserve", "rate cut", "rate hike", "fomc", "powell", "inflation", "cpi ", "pce ", "treasury yield", "bond yield", "soft landing", "recession"], tickers: ["TLT","JPM","BAC","GS","MS","SCHW","KRE"], subs: [
+    { id: "megabanks", name: "Money-Center Banks", kw: ["net interest", "loan growth", "bank earnings"], tickers: ["JPM","BAC","C","WFC"] },
+    { id: "capmarkets", name: "Capital Markets", kw: ["ipo", "m&a", "trading revenue", "deal"], tickers: ["GS","MS","SCHW"] },
+    { id: "regionals", name: "Regional Banks", kw: ["regional bank", "commercial real estate", "deposits"], tickers: ["KRE","TFC","USB"] },
+    { id: "duration", name: "Bonds & Duration", kw: ["treasury yield", "bond rally", "duration", "10-year"], tickers: ["TLT","IEF","AGG"] },
+  ]},
+  { id: "quantum", name: "Quantum Computing", kw: ["quantum"], tickers: ["IONQ","RGTI","QBTS","IBM","GOOGL"], subs: [
+    { id: "pureplays", name: "Pure Plays", kw: ["qubit", "ion trap", "annealing", "quantum startup"], tickers: ["IONQ","RGTI","QBTS"] },
+    { id: "bigtech", name: "Big-Tech Labs", kw: ["willow", "quantum chip", "error correction"], tickers: ["IBM","GOOGL","MSFT","NVDA"] },
+  ]},
+  { id: "ev-autonomous", name: "EV & Autonomous Driving", kw: ["electric vehicle", " ev ", "robotaxi", "self-driving", "autonomous", "fsd", "lidar", "charging"], tickers: ["TSLA","RIVN","LCID","UBER","GM","F","XPEV","NIO","MBLY"], subs: [
+    { id: "automakers", name: "Automakers", kw: ["deliveries", "ev sales", "production ramp"], tickers: ["TSLA","RIVN","LCID","GM","F","XPEV","NIO"] },
+    { id: "batteries", name: "Batteries & Lithium", kw: ["lithium", "battery", "cathode", "gigafactory"], tickers: ["ALB","SQM","LAC"] },
+    { id: "autonomy", name: "Autonomy & Robotaxi", kw: ["robotaxi", "waymo", "fsd", "self-driving", "lidar"], tickers: ["UBER","MBLY","GOOGL","TSLA"] },
+    { id: "charging", name: "Charging Network", kw: ["charging station", "supercharger", "charging network"], tickers: ["CHPT","EVGO"] },
+  ]},
+  { id: "robotics", name: "Robotics & Humanoids", kw: ["robot", "humanoid", "automation", "optimus", "figure ai"], tickers: ["TSLA","NVDA","ROK","ISRG","TER","SYM"], subs: [
+    { id: "humanoids", name: "Humanoids & Brains", kw: ["humanoid", "optimus", "figure ai", "robot foundation model"], tickers: ["TSLA","NVDA"] },
+    { id: "industrial", name: "Industrial Automation", kw: ["factory automation", "industrial robot", "plc"], tickers: ["ROK","EMR","HON"] },
+    { id: "warehouse", name: "Warehouse & Medical", kw: ["warehouse robot", "fulfillment", "surgical robot"], tickers: ["SYM","ISRG","TER"] },
+  ]},
+  { id: "space", name: "Space Economy", kw: ["space", "rocket", "satellite", "starlink", "spacex", "launch", "orbit"], tickers: ["RKLB","ASTS","LUNR","RDW","BA","PL"], subs: [
+    { id: "launch", name: "Launch Providers", kw: ["launch", "rocket", "neutron", "starship"], tickers: ["RKLB"] },
+    { id: "satellites", name: "Satellites & Comms", kw: ["satellite", "constellation", "direct-to-cell", "broadband from space"], tickers: ["ASTS","IRDM","VSAT","PL"] },
+    { id: "moon-defense", name: "Lunar & Defense Space", kw: ["lunar", "moon mission", "space force", "golden dome"], tickers: ["LUNR","RDW","LMT","NOC"] },
+  ]},
+  { id: "energy-oil", name: "Oil & Gas", kw: ["oil price", "crude", "opec", "natural gas", "natgas", "lng", "barrel", "drilling"], tickers: ["XOM","CVX","OXY","COP","SLB","HAL","EOG","FANG","LNG"], subs: [
+    { id: "majors", name: "Integrated Majors", kw: ["refining", "downstream", "dividend"], tickers: ["XOM","CVX","COP"] },
+    { id: "shale", name: "Shale E&P", kw: ["permian", "shale", "rig count", "production cut"], tickers: ["EOG","FANG","OXY","DVN"] },
+    { id: "services", name: "Oilfield Services", kw: ["drilling services", "frac", "offshore"], tickers: ["SLB","HAL","BKR"] },
+    { id: "lng", name: "LNG & Midstream", kw: ["lng", "pipeline", "export terminal", "natgas"], tickers: ["LNG","WMB","KMI","ET"] },
+  ]},
+  { id: "gold-havens", name: "Gold & Safe Havens", kw: ["gold price", "gold hits", "gold rally", "silver", "safe haven", "bullion", "precious metal"], tickers: ["GLD","NEM","GOLD","AEM","WPM","SLV","FNV"], subs: [
+    { id: "miners", name: "Gold Miners", kw: ["gold miner", "production", "all-in cost"], tickers: ["NEM","GOLD","AEM"] },
+    { id: "royalty", name: "Royalty & Streaming", kw: ["royalty", "streaming"], tickers: ["WPM","FNV","RGLD"] },
+    { id: "silver", name: "Silver", kw: ["silver"], tickers: ["SLV","PAAS","AG"] },
+    { id: "bullion", name: "Bullion ETFs", kw: ["bullion", "gold etf", "central bank buying"], tickers: ["GLD","IAU"] },
+  ]},
+  { id: "housing", name: "Housing & Homebuilders", kw: ["housing", "mortgage rate", "homebuilder", "home sales", "real estate market", "rent"], tickers: ["DHI","LEN","PHM","NVR","TOL","HD","LOW"], subs: [
+    { id: "builders", name: "Homebuilders", kw: ["homebuilder", "new home", "housing starts"], tickers: ["DHI","LEN","PHM","NVR","TOL"] },
+    { id: "supply", name: "Materials & Retail", kw: ["building products", "home improvement", "lumber"], tickers: ["HD","LOW","BLDR","SHW"] },
+    { id: "mortgage", name: "Mortgage Finance", kw: ["mortgage rate", "refinanc", "mortgage application"], tickers: ["RKT","UWMC"] },
+  ]},
+  { id: "biotech", name: "Biotech & FDA Catalysts", kw: ["fda approval", "fda ", "biotech", "clinical trial", "phase 3", "drug approval", "gene therapy", "obesity pill"], tickers: ["XBI","AMGN","GILD","VRTX","REGN","MRNA","CRSP","SRPT"], subs: [
+    { id: "largecap", name: "Large-Cap Biopharma", kw: ["blockbuster", "patent", "drug sales"], tickers: ["AMGN","GILD","VRTX","REGN"] },
+    { id: "geneedit", name: "Gene Editing & Therapy", kw: ["gene editing", "crispr", "gene therapy", "cell therapy"], tickers: ["CRSP","NTLA","BEAM","SRPT"] },
+    { id: "tools", name: "Tools & CDMO", kw: ["life science tools", "bioprocessing", "contract manufactur"], tickers: ["TMO","DHR","A"] },
+  ]},
+  { id: "meme-retail", name: "Meme / Retail Squeeze", kw: ["short squeeze", "meme stock", "yolo", "diamond hands", "short interest", "gamma squeeze", "to the moon"], tickers: ["GME","AMC","BBAI","DJT","OPEN","BYND"], subs: [
+    { id: "classics", name: "The Classics", kw: ["gamestop", "apes"], tickers: ["GME","AMC"] },
+    { id: "runners", name: "Current Runners", kw: ["squeeze candidate", "high short interest"], tickers: ["BBAI","DJT","OPEN","BYND"] },
+  ]},
 ];
 
 /* tickers that are common English words — count only with a $ prefix */
@@ -177,13 +253,30 @@ async function fetchRet21(t) { // 1-month adjusted return for basket confirmatio
   const sourcesUp = (reddit.length ? 1 : 0) + (ape.length || st.length ? 1 : 0) + (headlines.length ? 1 : 0);
   if (sourcesUp < 2) { console.error("Fewer than 2 source families reachable — keeping previous social.json."); process.exit(prev ? 0 : 1); }
 
-  // score themes + collect ticker buzz
-  const S = {}; // id → {reddit, news, buzz, examples, tickerHits}
-  for (const th of THEMES) S[th.id] = { reddit: 0, news: 0, buzz: 0, examples: [], tickerHits: new Map() };
+  // score themes + supply-chain sub-segments + collect ticker buzz
+  const S = {}; // id → {reddit, news, buzz, examples, tickerHits, subs}
+  for (const th of THEMES) S[th.id] = { reddit: 0, news: 0, buzz: 0, examples: [], tickerHits: new Map(), subs: Object.fromEntries((th.subs || []).map(sb => [sb.id, 0])) };
   const buzz = new Map(); // ticker → {mentions, sources:Set}
   const addBuzz = (t, w, src) => { const b = buzz.get(t) || { w: 0, sources: new Set() }; b.w += w; b.sources.add(src); buzz.set(t, b); };
-  const tickerThemes = new Map(); // ticker → themes containing it
-  for (const th of THEMES) for (const t of th.tickers) (tickerThemes.get(t) || tickerThemes.set(t, []).get(t)).push(th.id);
+  const tickerThemes = new Map(); // ticker → theme ids containing it
+  const tickerSubs = new Map();   // ticker → [{th, sub}] supply-chain segments containing it
+  for (const th of THEMES) {
+    for (const t of th.tickers) (tickerThemes.get(t) || tickerThemes.set(t, []).get(t)).push(th.id);
+    for (const sb of th.subs || []) {
+      for (const t of sb.tickers) {
+        (tickerSubs.get(t) || tickerSubs.set(t, []).get(t)).push({ th: th.id, sub: sb.id });
+        validSet.add(t); // sub-only tickers (e.g. MP, ASTS) must be extractable
+      }
+    }
+  }
+  // attribute a matched text to the theme's supply-chain segments by sub
+  // keywords or sub tickers mentioned in the text
+  const creditSubs = (th, text, tk, w) => {
+    const lc = " " + text.toLowerCase() + " ";
+    for (const sb of th.subs || []) {
+      if (sb.kw.some(k => lc.includes(k)) || sb.tickers.some(t => tk.has(t))) S[th.id].subs[sb.id] += w;
+    }
+  };
 
   for (const p of reddit) {
     const w = 1 + Math.log10(1 + p.score + p.comments);
@@ -191,11 +284,15 @@ async function fetchRet21(t) { // 1-month adjusted return for basket confirmatio
     for (const [t, tw] of tk) addBuzz(t, w * tw, "reddit");
     for (const th of themeMatches(p.text)) {
       S[th.id].reddit += w;
+      creditSubs(th, p.text, tk, w);
       if (S[th.id].examples.length < 6) S[th.id].examples.push({ src: "r/" + p.sub, title: p.text.slice(0, 140) });
       for (const [t, tw] of tk) if (th.tickers.includes(t)) S[th.id].tickerHits.set(t, (S[th.id].tickerHits.get(t) || 0) + w * tw);
     }
-    // posts that only name a theme ticker still count (half weight)
-    for (const [t, tw] of tk) for (const id of tickerThemes.get(t) || []) S[id].reddit += 0.5 * w * tw;
+    // posts that only name a theme/segment ticker still count (half weight)
+    for (const [t, tw] of tk) {
+      for (const id of tickerThemes.get(t) || []) S[id].reddit += 0.5 * w * tw;
+      for (const { th, sub } of tickerSubs.get(t) || []) S[th].subs[sub] += 0.5 * w * tw;
+    }
   }
   for (const h of headlines) {
     const w = 2.5;
@@ -203,6 +300,7 @@ async function fetchRet21(t) { // 1-month adjusted return for basket confirmatio
     for (const [t, tw] of tk) addBuzz(t, w * tw, "news");
     for (const th of themeMatches(h.title)) {
       S[th.id].news += w;
+      creditSubs(th, h.title, tk, w);
       if (S[th.id].examples.length < 6) S[th.id].examples.push({ src: h.src, title: h.title.slice(0, 140) });
     }
   }
@@ -210,25 +308,47 @@ async function fetchRet21(t) { // 1-month adjusted return for basket confirmatio
     const w = 2 * Math.log10(1 + r.mentions);
     addBuzz(r.t, w, "mentions");
     for (const id of tickerThemes.get(r.t) || []) S[id].buzz += w;
+    for (const { th, sub } of tickerSubs.get(r.t) || []) S[th].subs[sub] += w;
   }
   for (const t of st) {
     addBuzz(t, 3, "trending");
     for (const id of tickerThemes.get(t) || []) S[id].buzz += 3;
+    for (const { th, sub } of tickerSubs.get(t) || []) S[th].subs[sub] += 3;
   }
 
-  // price confirmation: basket 1m return (up to 6 most-liquid tickers per theme) vs SPY
+  // price confirmation: 1m basket returns for themes AND their supply-chain
+  // segments vs SPY — prefetched with a small worker pool (≈200 tickers)
   console.log("Confirming with 1-month price action…");
   const retCache = new Map();
-  const ret = async t => { if (!retCache.has(t)) retCache.set(t, await fetchRet21(t)); return retCache.get(t); };
-  const spyRet = await ret("SPY");
+  const need = new Set(["SPY"]);
+  for (const th of THEMES) {
+    for (const t of th.tickers.slice(0, 6)) need.add(t);
+    for (const sb of th.subs || []) for (const t of sb.tickers.slice(0, 4)) need.add(t);
+  }
+  {
+    const queue = [...need];
+    let qi = 0;
+    const worker = async () => {
+      while (qi < queue.length) {
+        const t = queue[qi++];
+        retCache.set(t, await fetchRet21(t));
+        await new Promise(r => setTimeout(r, 150));
+      }
+    };
+    await Promise.all(Array.from({ length: 5 }, worker));
+  }
+  const ret = t => retCache.get(t) ?? null;
+  const avgRet = tickers => {
+    const rets = tickers.map(ret).filter(r => r != null);
+    return rets.length ? rets.reduce((a, b) => a + b, 0) / rets.length : null;
+  };
+  const spyRet = ret("SPY");
   const themesOut = [];
   const totalRaw = Object.values(S).reduce((s, x) => s + x.reddit + x.news + x.buzz, 0) || 1;
   for (const th of THEMES) {
     const s = S[th.id];
     const raw = s.reddit + s.news + s.buzz;
-    const rets = [];
-    for (const t of th.tickers.slice(0, 6)) { const r = await ret(t); if (r != null) rets.push(r); }
-    const basketRet = rets.length ? rets.reduce((a, b) => a + b, 0) / rets.length : null;
+    const basketRet = avgRet(th.tickers.slice(0, 6));
     const excess = (basketRet != null && spyRet != null) ? basketRet - spyRet : null;
     // confidence: source diversity (40) + dominance (30) + price confirmation (30)
     const diversity = ((s.reddit > 0) + (s.news > 0) + (s.buzz > 0)) / 3 * 40;
@@ -247,6 +367,12 @@ async function fetchRet21(t) { // 1-month adjusted return for basket confirmatio
       tickers: th.tickers,
       topTickers: [...S[th.id].tickerHits.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5).map(([t]) => t),
       examples: s.examples.slice(0, 4),
+      subs: (() => { // supply chain: chatter share within the theme + own 1m basket
+        const list = (th.subs || []).map(sb => ({ id: sb.id, name: sb.name, raw: +(s.subs[sb.id] || 0).toFixed(1), tickers: sb.tickers, basketRet1m: (v => v == null ? null : +v.toFixed(4))(avgRet(sb.tickers.slice(0, 4))) }));
+        const tot = list.reduce((a, b) => a + b.raw, 0);
+        for (const sb of list) sb.share = tot ? Math.round(100 * sb.raw / tot) : 0;
+        return list.sort((a, b) => b.raw - a.raw);
+      })(),
     });
   }
   themesOut.sort((a, b) => b.raw - a.raw);
