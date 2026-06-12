@@ -30,11 +30,14 @@ jobs:
       - name: Fetch market data
         run: node scripts/fetch_data.js
 
+      - name: Social listening (self-skips unless ~12h old)
+        run: node scripts/fetch_social.js
+
       - name: Commit if changed
         run: |
           git config user.name "data-bot"
           git config user.email "actions@github.com"
-          git add data.json archive.json stocks.json universe.json
+          git add data.json archive.json stocks.json universe.json social.json
           if git diff --cached --quiet; then
             echo "No changes."
           else

@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Themes — Money Flow Tracker</title>
+<style>
+  :root {
+    --bg: #0d1117; --panel: #161b22; --panel2: #1c2128; --border: #2d333b;
+    --text: #e6edf3; --muted: #8b949e; --green: #3fb950; --red: #f85149;
+    --blue: #58a6ff; --amber: #d29922; --purple: #b392f0;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; min-height: 100vh; }
+  header { padding: 18px 24px 0; display: flex; flex-wrap: wrap; align-items: center; gap: 14px; }
+  h1 { font-size: 20px; font-weight: 700; letter-spacing: -0.3px; }
+  h1 .sub { color: var(--muted); font-weight: 400; font-size: 13px; margin-left: 10px; }
+  .nav { display: inline-flex; background: var(--panel); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  .nav a { color: var(--muted); padding: 8px 18px; font-size: 13px; font-weight: 600; text-decoration: none; border-right: 1px solid var(--border); white-space: nowrap; }
+  .nav a:last-child { border-right: none; }
+  .nav a.active { background: var(--blue); color: #fff; }
+  .nav a:hover:not(.active) { color: var(--text); background: var(--panel2); }
+  .badge { font-size: 11px; padding: 3px 10px; border-radius: 12px; border: 1px solid var(--border); color: var(--muted); }
+  .badge.live { color: var(--green); border-color: var(--green); }
+  #updated { font-size: 11px; color: var(--muted); margin-left: auto; }
+  main { padding: 16px 24px 24px; display: flex; flex-direction: column; gap: 14px; max-width: 1280px; }
+  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 16px; }
+  .card h2 { font-size: 13px; text-transform: uppercase; letter-spacing: 0.8px; color: var(--muted); margin-bottom: 4px; }
+  .card .hint { font-size: 12px; color: var(--muted); margin-bottom: 12px; line-height: 1.5; }
+  /* hero */
+  #hero { border-color: var(--blue); display: grid; grid-template-columns: auto 1fr; gap: 22px; align-items: center; }
+  @media (max-width: 760px) { #hero { grid-template-columns: 1fr; } }
+  .gauge { width: 124px; height: 124px; position: relative; }
+  .gauge svg { transform: rotate(-90deg); }
+  .gauge .num { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+  .gauge .num b { font-size: 28px; }
+  .gauge .num span { font-size: 10px; letter-spacing: 1px; font-weight: 700; }
+  #hero .k { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); }
+  #hero .theme-name { font-size: 26px; font-weight: 800; margin: 2px 0 6px; }
+  #hero .mets { display: flex; flex-wrap: wrap; gap: 18px; font-size: 13px; margin: 8px 0; color: var(--muted); }
+  #hero .mets b { color: var(--text); font-variant-numeric: tabular-nums; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+  .chip { background: var(--panel2); border: 1px solid var(--border); border-radius: 12px; padding: 2px 10px; font-size: 12px; text-decoration: none; color: var(--blue); font-weight: 600; }
+  .chip:hover { border-color: var(--blue); }
+  .pos { color: var(--green); } .neg { color: var(--red); } .mut { color: var(--muted); }
+  .conf-HIGH { color: var(--green); } .conf-MEDIUM { color: var(--amber); } .conf-LOW { color: var(--red); }
+  /* leaderboard */
+  .lb-row { display: grid; grid-template-columns: 26px 200px 1fr 90px 110px 96px 86px; gap: 10px; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--panel2); font-size: 13px; cursor: pointer; }
+  .lb-row:hover { background: rgba(88,166,255,.04); }
+  .lb-row .nm { font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .lb-row .rank { color: var(--muted); font-variant-numeric: tabular-nums; }
+  .barbox { height: 12px; background: var(--panel2); border-radius: 3px; overflow: hidden; position: relative; }
+  .barbox .bar { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 3px; }
+  .num { text-align: right; font-variant-numeric: tabular-nums; }
+  .src-mini { font-size: 10.5px; color: var(--muted); white-space: nowrap; }
+  .lb-detail { background: var(--panel2); border-radius: 8px; padding: 12px 14px; margin: 4px 0 8px; font-size: 12.5px; }
+  .lb-detail .ex { color: var(--muted); margin: 3px 0; line-height: 1.45; }
+  .lb-detail .ex b { color: var(--text); font-weight: 600; }
+  @media (max-width: 900px) { .lb-row { grid-template-columns: 22px 1fr 70px 80px; } .lb-row .hide-sm { display: none; } }
+  /* two-col bottom */
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  @media (max-width: 900px) { .two-col { grid-template-columns: 1fr; } }
+  table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  th { text-align: left; color: var(--muted); font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: .4px; padding: 6px 8px; border-bottom: 1px solid var(--border); }
+  td { padding: 6px 8px; border-bottom: 1px solid var(--panel2); font-variant-numeric: tabular-nums; }
+  td a { color: var(--blue); text-decoration: none; font-weight: 700; }
+  footer { padding: 0 24px 24px; font-size: 11px; color: var(--muted); line-height: 1.6; max-width: 980px; }
+  #loading { display: flex; flex-direction: column; align-items: center; gap: 12px; color: var(--muted); font-size: 13px; padding: 80px 0; }
+  .spinner { width: 28px; height: 28px; border: 3px solid var(--border); border-top-color: var(--blue); border-radius: 50%; animation: spin .9s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+<header>
+  <h1>Themes<span class="sub">social listening &rarr; 1&ndash;2 month investment themes</span></h1>
+  <nav class="nav">
+    <a href="index.html">Flow Tracker</a>
+    <a href="stocks.html">Stock Picker</a>
+    <a href="themes.html" class="active">Themes</a>
+    <a href="assets.html">Asset Guide</a>
+  </nav>
+  <span id="status" class="badge">loading…</span>
+  <span id="updated"></span>
+</header>
+
+<main>
+  <div id="loading"><div class="spinner"></div><div>Loading social data…</div></div>
+  <div id="content" style="display:none; flex-direction:column; gap:14px">
+
+    <div class="card" id="hero">
+      <div class="gauge" id="gauge"></div>
+      <div>
+        <div class="k">Today's main theme <span id="hero-date"></span></div>
+        <div class="theme-name" id="hero-name">–</div>
+        <div class="mets" id="hero-mets"></div>
+        <div class="chips" id="hero-tickers"></div>
+        <div id="hero-examples" style="margin-top:10px;font-size:12px;color:var(--muted);line-height:1.6"></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Theme Leaderboard</h2>
+      <div class="hint">Share of all theme chatter across Reddit, aggregated mention trackers, StockTwits trending and finance-news headlines, refreshed every ~12 hours. <b>1M basket</b> = average 1-month return of the theme's representative stocks (your 1&ndash;2 month holding window) vs <span id="spy-ret"></span> for SPY. Click a theme for sample headlines and its tickers.</div>
+      <div class="lb-row" style="cursor:default;color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.4px">
+        <span>#</span><span>Theme</span><span>Chatter share</span><span class="num">Confidence</span><span class="num hide-sm">Sources R/N/B</span><span class="num">1M basket</span><span class="num hide-sm">Δ vs prev</span>
+      </div>
+      <div id="leaderboard"></div>
+    </div>
+
+    <div class="two-col">
+      <div class="card">
+        <h2>Social Buzz — Most-Mentioned Tickers</h2>
+        <div class="hint">Engagement-weighted mentions across all sources right now. Click a ticker to open it in the Stock Picker.</div>
+        <table><thead><tr><th>Ticker</th><th>Buzz</th><th>Seen on</th></tr></thead><tbody id="buzz"></tbody></table>
+      </div>
+      <div class="card">
+        <h2>Daily Main Theme — History</h2>
+        <div class="hint">The winning theme is finalized once per day (first refresh of the day) and stored, so you can see how long a theme stays in the lead — persistence matters for a 1&ndash;2 month trade.</div>
+        <table><thead><tr><th>Date</th><th>Theme</th><th>Share</th><th>Confidence</th></tr></thead><tbody id="daily"></tbody></table>
+      </div>
+    </div>
+
+  </div>
+</main>
+
+<footer>
+  <strong>Method.</strong> A scheduled job reads public social and news sources (Reddit finance subreddits, ApeWisdom aggregated mentions, StockTwits trending symbols, CNBC/MarketWatch/Yahoo Finance headlines) every ~12 hours, matches text against a fixed dictionary of theme keywords and representative tickers, and weights each match by engagement. Confidence = source diversity (40) + chatter dominance (30) + 1-month price confirmation of the theme's stock basket vs SPY (30). This is keyword-based listening, not human-level reading — it measures <em>attention</em>, which for momentum trading is the point, but it can misread sarcasm or novel phrasing. High social attention also often arrives <em>after</em> a move has started. Educational tool, not investment advice.
+</footer>
+
+<script>
+const fmtPct = v => v == null ? "–" : (v >= 0 ? "+" : "") + (v * 100).toFixed(1) + "%";
+const cls = v => v == null ? "mut" : v >= 0 ? "pos" : "neg";
+const esc = s => s.replace(/&/g, "&amp;").replace(/</g, "&lt;");
+const confColor = l => l === "HIGH" ? "var(--green)" : l === "MEDIUM" ? "var(--amber)" : "var(--red)";
+const fmtDT = iso => new Date(iso).toLocaleString("en-GB", { timeZone: "Asia/Bangkok", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) + " GMT+7";
+let openId = null, S = null;
+
+function gauge(conf, label) {
+  const r = 52, c = 2 * Math.PI * r, frac = conf / 100;
+  document.getElementById("gauge").innerHTML = `
+    <svg width="124" height="124"><circle cx="62" cy="62" r="${r}" fill="none" stroke="var(--panel2)" stroke-width="11"/>
+    <circle cx="62" cy="62" r="${r}" fill="none" stroke="${confColor(label)}" stroke-width="11" stroke-linecap="round"
+      stroke-dasharray="${(c * frac).toFixed(1)} ${c.toFixed(1)}"/></svg>
+    <div class="num"><b style="color:${confColor(label)}">${conf}</b><span style="color:${confColor(label)}">${label}</span><span style="color:var(--muted);font-weight:400">confidence</span></div>`;
+}
+
+function renderHero(t) {
+  gauge(t.confidence, t.confLabel);
+  document.getElementById("hero-date").textContent = "— finalized " + new Date(S.updated).toLocaleDateString("en-GB", { timeZone: "Asia/Bangkok", day: "numeric", month: "short" });
+  document.getElementById("hero-name").textContent = t.name;
+  document.getElementById("hero-mets").innerHTML =
+    `<span>Chatter share <b>${t.score}%</b> of all themes</span>` +
+    `<span>1M basket <b class="${cls(t.basketRet1m)}">${fmtPct(t.basketRet1m)}</b> vs SPY <b class="${cls(S.spyRet1m)}">${fmtPct(S.spyRet1m)}</b></span>` +
+    (t.momentum != null ? `<span>Chatter vs prev. snapshot <b class="${cls(t.momentum)}">${t.momentum >= 0 ? "+" : ""}${t.momentum}</b></span>` : "") +
+    `<span>Sources: <b>${t.sources.reddit ? "Reddit " : ""}${t.sources.news ? "News " : ""}${t.sources.buzz ? "Ticker-buzz" : ""}</b></span>`;
+  document.getElementById("hero-tickers").innerHTML =
+    (t.topTickers.length ? t.topTickers : t.tickers.slice(0, 8)).map(x => `<a class="chip" href="stocks.html?q=${x}" title="Open ${x} in the Stock Picker">${x}</a>`).join("");
+  document.getElementById("hero-examples").innerHTML =
+    t.examples.slice(0, 3).map(e => `“${esc(e.title)}” <span style="opacity:.7">— ${esc(e.src)}</span>`).join("<br>");
+}
+
+function renderLeaderboard() {
+  const max = Math.max(...S.themes.map(t => t.score)) || 1;
+  document.getElementById("leaderboard").innerHTML = S.themes.map((t, i) => {
+    const row = `<div class="lb-row" data-id="${t.id}">
+      <span class="rank">${i + 1}</span>
+      <span class="nm">${t.name}</span>
+      <span class="barbox"><span class="bar" style="width:${(t.score / max * 100).toFixed(0)}%;background:${i === 0 ? "var(--blue)" : "var(--border)"}"></span></span>
+      <span class="num" style="color:${confColor(t.confLabel)};font-weight:700">${t.confidence} ${t.confLabel}</span>
+      <span class="num src-mini hide-sm">${t.sources.reddit.toFixed(0)} / ${t.sources.news.toFixed(0)} / ${t.sources.buzz.toFixed(0)}</span>
+      <span class="num ${cls(t.basketRet1m)}">${fmtPct(t.basketRet1m)}</span>
+      <span class="num hide-sm ${cls(t.momentum)}">${t.momentum == null ? "–" : (t.momentum >= 0 ? "+" : "") + t.momentum.toFixed(0)}</span>
+    </div>`;
+    if (openId !== t.id) return row;
+    return row + `<div class="lb-detail">
+      ${t.examples.length ? t.examples.map(e => `<div class="ex">“${esc(e.title)}” — <b>${esc(e.src)}</b></div>`).join("") : '<div class="ex">No sample posts captured this cycle — score driven by ticker-level buzz.</div>'}
+      <div class="chips" style="margin-top:8px">${t.tickers.map(x => `<a class="chip" href="stocks.html?q=${x}">${x}</a>`).join("")}</div>
+    </div>`;
+  }).join("");
+  document.querySelectorAll(".lb-row[data-id]").forEach(r => r.addEventListener("click", () => {
+    openId = openId === r.dataset.id ? null : r.dataset.id;
+    renderLeaderboard();
+  }));
+}
+
+(async function init() {
+  let ok = false;
+  try {
+    const r = await fetch("social.json?t=" + Date.now(), { signal: AbortSignal.timeout(10000) });
+    if (r.ok) { S = await r.json(); ok = !!S?.themes?.length; }
+  } catch (e) {}
+  document.getElementById("loading").style.display = "none";
+  const badge = document.getElementById("status");
+  if (!ok) {
+    badge.textContent = "● no data";
+    document.getElementById("content").style.display = "flex";
+    document.getElementById("hero-name").textContent = "social.json not available yet";
+    document.getElementById("hero-mets").innerHTML = "Run the GitHub Action (or scripts/fetch_social.js) once to generate it.";
+    return;
+  }
+  badge.textContent = "● live"; badge.className = "badge live";
+  const ageH = (Date.now() - Date.parse(S.updated)) / 36e5;
+  document.getElementById("updated").textContent = `Updated ${fmtDT(S.updated)} (${ageH < 1 ? "<1" : ageH.toFixed(0)}h ago) · refreshes ~12h`;
+  document.getElementById("spy-ret").innerHTML = `<b class="${cls(S.spyRet1m)}">${fmtPct(S.spyRet1m)}</b>`;
+  document.getElementById("content").style.display = "flex";
+  renderHero(S.themes[0]);
+  renderLeaderboard();
+  document.getElementById("buzz").innerHTML = S.buzz.slice(0, 15).map(b =>
+    `<tr><td><a href="stocks.html?q=${b.t}">${b.t}</a></td><td>${b.w.toFixed(0)}</td><td class="mut">${b.sources.join(", ")}</td></tr>`).join("");
+  document.getElementById("daily").innerHTML = [...S.daily].reverse().map(d =>
+    `<tr><td>${d.date}</td><td><b>${d.name}</b></td><td>${d.score}%</td><td style="color:${confColor(d.confLabel)};font-weight:700">${d.confidence} ${d.confLabel}</td></tr>`).join("");
+})();
+</script>
+</body>
+</html>

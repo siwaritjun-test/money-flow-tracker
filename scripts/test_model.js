@@ -83,6 +83,17 @@ const Y = NOW / 1000 - 86400;
 check(parsePreFromChart(mkChart([Y], [9.9], REG), NOW) === null, "parser rejects yesterday's stale bar");
 check(parsePreFromChart(mkChart([NOW / 1000 - 300], [null], REG), NOW) === null, "parser rejects all-null closes");
 
+// social.json schema (when the social-listening job has run at least once)
+try {
+  const soc = JSON.parse(fs.readFileSync(path.join(ROOT, "social.json"), "utf8"));
+  check(soc.themes.length >= 10, `social: ${soc.themes.length} themes scored`);
+  check(soc.themes.every(t => t.confidence >= 0 && t.confidence <= 100), "social: confidences within 0–100");
+  check(soc.themes.every((t, i, a) => i === 0 || a[i - 1].raw >= t.raw), "social: themes sorted by chatter");
+  const share = soc.themes.reduce((s, t) => s + t.score, 0);
+  check(share >= 90 && share <= 105, `social: chatter shares sum ≈100 (${share})`);
+  check(soc.daily.length >= 1 && !!soc.daily[soc.daily.length - 1].name, `social: daily winner finalized (${soc.daily[soc.daily.length - 1].name})`);
+} catch (e) { console.log("(social.json not present — social checks skipped)"); }
+
 console.log("\n--- Sector ranking (1m+3m excess vs SPY) ---");
 for (const s of model.secList) {
   console.log(`#${String(s.rank).padStart(2)} ${s.t.padEnd(5)} ${SECTOR_NAMES[s.t].padEnd(15)} quad=${(s.rrg ? s.rrg.quad : "–").padEnd(10)} ex1m=${(s.ex21 * 100).toFixed(1).padStart(6)}% ex3m=${(s.ex63 * 100).toFixed(1).padStart(6)}% flow=${s.flow == null ? "–" : s.flow.toFixed(0).padStart(6) + "M/d"}`);

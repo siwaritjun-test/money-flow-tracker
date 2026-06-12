@@ -131,6 +131,7 @@
   <nav class="nav">
     <a href="index.html">Flow Tracker</a>
     <a href="stocks.html" class="active">Stock Picker</a>
+    <a href="themes.html">Themes</a>
     <a href="assets.html">Asset Guide</a>
   </nav>
   <span id="status" class="badge">loading…</span>
@@ -727,6 +728,12 @@ for (const id of ["acct", "riskpct"]) {
   if (state.updated) document.getElementById("updated").textContent =
     "Data updated " + new Date(state.updated).toLocaleString("en-GB", { timeZone: "Asia/Bangkok", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) + " GMT+7";
   document.getElementById("content").style.display = "flex";
+  // deep link from other pages: stocks.html?q=NVDA pre-fills the search
+  const q = new URLSearchParams(location.search).get("q");
+  if (q) {
+    state.search = q.trim();
+    document.getElementById("search").value = state.search;
+  }
   renderAll();
   if (session() === "pre") {
     document.getElementById("pre-banner").style.display = "";

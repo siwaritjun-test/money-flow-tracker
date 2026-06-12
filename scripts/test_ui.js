@@ -90,6 +90,25 @@ const puppeteer = require("puppeteer-core");
   const rankNoted = await page.$eval("#pre-note-rank", el => el.innerText.includes("PRE-MARKET"));
   rankNoted ? pass("rankings panel notes PRE-MARKET") : fail("rankings panel missing note");
 
+  // 9) themes page renders from social.json
+  await page.goto("http://localhost:8123/themes.html", { waitUntil: "networkidle2", timeout: 60000 });
+  try {
+    await page.waitForFunction(() => { const n = document.getElementById("hero-name"); return n && n.textContent.length > 2 && !n.textContent.includes("not available"); }, { timeout: 20000 });
+    const hero = await page.$eval("#hero-name", el => el.textContent);
+    pass(`themes hero shows main theme: ${hero}`);
+  } catch (e) { fail("themes hero did not render"); }
+  const lbRows = await page.$$eval("#leaderboard .lb-row", r => r.length);
+  lbRows >= 10 ? pass(`theme leaderboard: ${lbRows} themes`) : fail(`leaderboard only ${lbRows} rows`);
+  await page.click("#leaderboard .lb-row");
+  const detail = await page.$(".lb-detail");
+  detail ? pass("theme row expands with examples/tickers") : fail("theme detail did not expand");
+
+  // 10) deep link: themes → stocks.html?q=NVDA pre-fills search
+  await page.goto("http://localhost:8123/stocks.html?q=NVDA", { waitUntil: "networkidle2", timeout: 60000 });
+  await page.waitForSelector("#tbody tr", { timeout: 30000 });
+  const firstT = await page.$eval("#tbody tr.stock-row", tr => tr.dataset.t);
+  firstT === "NVDA" ? pass("deep link ?q=NVDA filters to NVDA") : fail(`deep link got ${firstT}`);
+
   await page.screenshot({ path: "C:\\Users\\User\\ui_test.png" });
   await browser.close();
   console.log(process.exitCode ? "\nUI TESTS FAILED" : "\nUI TESTS PASSED");

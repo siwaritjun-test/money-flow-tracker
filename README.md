@@ -10,6 +10,9 @@ A **macro regime bar** sits above the views: risk-appetite ratios (discretionary
 
 - `index.html` — the tracker
 - `stocks.html` — momentum stock picker (sector rotation → stock selection)
+- `themes.html` — social-listening investment themes (1–2 month horizon): Reddit + ApeWisdom mentions + StockTwits trending + CNBC/MarketWatch/Yahoo headlines, scored against a 16-theme keyword dictionary, confirmed with 1-month basket returns; main theme finalized daily, refreshed every ~12h
+- `scripts/fetch_social.js` — the social-listening job (runs in the Action, self-skips unless social.json is ≥11h old)
+- `social.json` — created by the Action; theme scores, confidence, ticker buzz, daily winners
 - `assets.html` — asset guide (what each ticker is made of)
 - `scripts/fetch_data.js` — server-side data fetcher (runs in GitHub Actions, no dependencies)
 - `scripts/fetch_universe.js` — refreshes `universe.json` (full S&P 500 list with sectors) from Wikipedia
