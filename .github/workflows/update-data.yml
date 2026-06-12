@@ -24,6 +24,9 @@ jobs:
         with:
           node-version: "24"
 
+      - name: Refresh stock universe (S&P 500 list)
+        run: node scripts/fetch_universe.js
+
       - name: Fetch market data
         run: node scripts/fetch_data.js
 
@@ -31,7 +34,7 @@ jobs:
         run: |
           git config user.name "data-bot"
           git config user.email "actions@github.com"
-          git add data.json archive.json stocks.json
+          git add data.json archive.json stocks.json universe.json
           if git diff --cached --quiet; then
             echo "No changes."
           else

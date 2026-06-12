@@ -21,9 +21,17 @@ const etf = {}, stocks = {};
 for (const [t, rows] of Object.entries(data.series)) etf[t] = toRows(rows);
 for (const [t, rows] of Object.entries(stk.series)) stocks[t] = toRows(rows);
 
-const model = buildModel(stocks, STOCK_UNIVERSE, etf);
+// same universe selection as fetch_data.js / stocks.html
+let universe = STOCK_UNIVERSE;
+try {
+  const u = JSON.parse(fs.readFileSync(path.join(ROOT, "universe.json"), "utf8"));
+  if (u?.sectors && u.count > 450) universe = u.sectors;
+} catch (e) {}
+const expected = Object.values(universe).flat().length;
 
-check(model.stocks.length >= 80, `model built: ${model.stocks.length} stocks scored`);
+const model = buildModel(stocks, universe, etf);
+
+check(model.stocks.length >= expected * 0.85, `model built: ${model.stocks.length}/${expected} stocks scored`);
 check(model.secList.length === 11, `all 11 sectors ranked (${model.secList.length})`);
 check(model.stocks.every(s => s.score >= 0 && s.score <= 100), "all composite scores within 0–100");
 check(model.stocks.every(s => s.mfi == null || (s.mfi >= 0 && s.mfi <= 100)), "all MFI values within 0–100");

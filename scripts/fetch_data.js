@@ -27,8 +27,16 @@ const TICKERS = [
 ];
 
 // individual stocks (stocks.html) — fetched with high/low for MFI/ATR,
-// written to stocks.json, never archived (keeps archive.json lean)
-const STOCK_TICKERS = [...new Set(Object.values(STOCK_UNIVERSE).flatMap(l => l.map(s => s.t)))];
+// written to stocks.json, never archived (keeps archive.json lean).
+// Universe: auto-refreshed S&P 500 list (universe.json, see fetch_universe.js),
+// falling back to the built-in 88-stock list if it's missing/implausible.
+function loadUniverse(root) {
+  try {
+    const u = JSON.parse(fs.readFileSync(path.join(root, "universe.json"), "utf8"));
+    if (u?.sectors && u.count > 450) return u.sectors;
+  } catch (e) {}
+  return STOCK_UNIVERSE;
+}
 
 const ROOT = path.join(__dirname, "..");
 const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36";
@@ -83,7 +91,7 @@ async function fetchTicker(t, withHL = false, attempt = 1) {
   }
 }
 
-async function fetchSet(tickers, withHL) {
+async function fetchSet(tickers, withHL, workers = 3) {
   const series = {};
   let idx = 0, ok = 0;
   async function worker() {
@@ -91,11 +99,37 @@ async function fetchSet(tickers, withHL) {
       const t = tickers[idx++];
       const rows = await fetchTicker(t, withHL);
       if (rows) { series[t] = rows; ok++; console.log(`OK   ${t}: ${rows.length} bars, last close ${rows[rows.length - 1][1]}`); }
-      await new Promise(r => setTimeout(r, 300)); // be polite
+      await new Promise(r => setTimeout(r, 250)); // be polite
     }
   }
-  await Promise.all([worker(), worker(), worker()]);
+  await Promise.all(Array.from({ length: workers }, worker));
   return { series, ok };
+}
+
+/* ~500 tickers → refreshed once per trading day: skip when the existing file
+   already has the same last bar day as SPY and is <20h old (the screener's
+   metrics are daily anyway, and this keeps repo history from ballooning). */
+async function updateStocks(etfSeries) {
+  const stockTickers = [...new Set(Object.values(loadUniverse(ROOT)).flatMap(l => l.map(s => s.t)))];
+  try {
+    const prev = JSON.parse(fs.readFileSync(path.join(ROOT, "stocks.json"), "utf8"));
+    const ageH = (Date.now() - Date.parse(prev.updated)) / 36e5;
+    const lastDay = rows => new Date(rows[rows.length - 1][0]).toISOString().slice(0, 10);
+    const prevRows = prev.series && Object.values(prev.series)[0];
+    const sameUniverse = prev.tickers >= stockTickers.length * 0.9;
+    if (ageH < 20 && sameUniverse && etfSeries.SPY && prevRows && lastDay(etfSeries.SPY) === lastDay(prevRows)) {
+      console.log(`stocks.json is current (${ageH.toFixed(1)}h old, same last bar) — skipping stock fetch.`);
+      return;
+    }
+  } catch (e) { /* no previous stocks.json → fetch */ }
+  const stk = await fetchSet(stockTickers, true, 5);
+  if (stk.ok >= stockTickers.length * 0.7) {
+    fs.writeFileSync(path.join(ROOT, "stocks.json"),
+      JSON.stringify({ updated: new Date().toISOString(), tickers: stk.ok, series: stk.series }));
+    console.log(`Wrote stocks.json (${stk.ok}/${stockTickers.length} stocks)`);
+  } else {
+    console.error(`Only ${stk.ok}/${stockTickers.length} stocks fetched — keeping previous stocks.json.`);
+  }
 }
 
 (async function main() {
@@ -112,15 +146,8 @@ async function fetchSet(tickers, withHL) {
   console.log(`Wrote data.json (${ok} tickers)`);
 
   // stocks.json — individual stocks for stocks.html, row [ts, close, vol, adj, high, low].
-  // A bad stock run never blocks the ETF data above.
-  const stk = await fetchSet(STOCK_TICKERS, true);
-  if (stk.ok >= STOCK_TICKERS.length * 0.7) {
-    fs.writeFileSync(path.join(ROOT, "stocks.json"),
-      JSON.stringify({ updated: new Date().toISOString(), tickers: stk.ok, series: stk.series }));
-    console.log(`Wrote stocks.json (${stk.ok}/${STOCK_TICKERS.length} stocks)`);
-  } else {
-    console.error(`Only ${stk.ok}/${STOCK_TICKERS.length} stocks fetched — keeping previous stocks.json.`);
-  }
+  // A bad stock run never blocks the ETF data above or the archive merge below.
+  await updateStocks(series);
 
   // archive.json — permanent daily-close history, merged across runs
   const archPath = path.join(ROOT, "archive.json");

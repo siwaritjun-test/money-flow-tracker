@@ -2,7 +2,7 @@
 
 Live market-rotation monitor: estimates money flowing between US sectors, factors/styles, bonds & credit, and major asset classes from price × volume. Views: Sankey flow map, Relative Rotation Graph (RRG), 12-week flow history heatmap, plus an Asset Guide page detailing all 43 tickers. Daily / weekly / monthly periods, auto-refresh.
 
-**Stock Picker** (`stocks.html`) turns the rotation signal into a momentum-style stock screen: sectors are ranked by money flow + RRG quadrant, then ~88 liquid large caps (≈8 per SPDR sector) are scored 0–100 on a composite of relative strength vs their own sector (1m/3m), Money Flow Index, OBV money-flow trend, distance to 52-week high, volume surge and 20/50-day trend filters. Includes a market-breadth gauge, accumulation/distribution divergence flags, unusual-volume alerts, an ATR-based stop-loss + position-size calculator, and a watchlist (saved in the browser).
+**Stock Picker** (`stocks.html`) turns the rotation signal into a momentum-style stock screen: sectors are ranked by money flow + RRG quadrant, then the **full S&P 500** (auto-refreshed constituent list, `universe.json`) is scored 0–100 on a composite of relative strength vs their own sector (1m/3m), Money Flow Index, OBV money-flow trend, distance to 52-week high, volume surge and 20/50-day trend filters. A search box filters by ticker/name, and **any other US ticker** can be pulled live from Yahoo (press Enter) and scored against the same percentiles. Includes a market-breadth gauge, accumulation/distribution divergence flags, unusual-volume alerts, an ATR-based stop-loss + position-size calculator, and a watchlist (saved in the browser). See `ARCHITECTURE.md` for the scaling plan (serverless backend → full backend).
 
 A **macro regime bar** sits above the views: risk-appetite ratios (discretionary/staples, high-beta/low-vol, equal-weight breadth, semis, small caps, high-yield credit, copper/gold — each scored on its ~1-month trend), the VIX level, and the 10y−3m yield-curve slope, summarized into a RISK-ON / MIXED / RISK-OFF verdict. Momentum signals are most trustworthy when they agree with the regime.
 
@@ -12,11 +12,13 @@ A **macro regime bar** sits above the views: risk-appetite ratios (discretionary
 - `stocks.html` — momentum stock picker (sector rotation → stock selection)
 - `assets.html` — asset guide (what each ticker is made of)
 - `scripts/fetch_data.js` — server-side data fetcher (runs in GitHub Actions, no dependencies)
-- `scripts/stock_universe.js` — the ~88-stock universe (8 largest holdings per SPDR sector), shared by fetcher and page
+- `scripts/fetch_universe.js` — refreshes `universe.json` (full S&P 500 list with sectors) from Wikipedia
+- `scripts/stock_universe.js` — built-in 88-stock fallback universe, used when universe.json is unavailable
 - `scripts/stock_model.js` — pure indicator/scoring math (MFI, OBV, ATR, composite score), shared by page and tests
 - `.github/workflows/update-data.yml` — schedule: refreshes data every 2h on weekdays
 - `data.json` — created by the Action; the site loads this directly (no CORS proxies needed)
-- `stocks.json` — created by the Action; daily bars (with high/low) for the stock universe
+- `universe.json` — created by the Action; current S&P 500 constituents grouped by sector ETF
+- `stocks.json` — created by the Action; daily bars (with high/low) for the stock universe, refreshed once per trading day
 - `archive.json` — created by the Action; permanent daily history that grows beyond Yahoo's window
 
 Data priority: `data.json` (if fresh) → live Yahoo via CORS proxies → offline sample data. So the site also works standalone without the Action — the pipeline just makes it faster and more reliable.

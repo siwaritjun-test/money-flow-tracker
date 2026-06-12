@@ -34,6 +34,11 @@
   .risk-inputs { display: inline-flex; gap: 8px; align-items: center; font-size: 12px; color: var(--muted); }
   .risk-inputs input { width: 90px; background: var(--panel); border: 1px solid var(--border); border-radius: 6px; color: var(--text); padding: 6px 8px; font-size: 13px; }
   .risk-inputs input:focus { outline: none; border-color: var(--blue); }
+  #search { width: 280px; background: var(--panel); border: 1px solid var(--border); border-radius: 8px; color: var(--text); padding: 8px 12px; font-size: 13px; }
+  #search:focus { outline: none; border-color: var(--blue); }
+  #search::placeholder { color: var(--muted); }
+  .fetch-live-btn { background: var(--panel2); border: 1px solid var(--blue); color: var(--blue); border-radius: 6px; padding: 5px 12px; font-size: 12px; cursor: pointer; }
+  .fetch-live-btn:hover { background: var(--blue); color: #fff; }
   #regime-wrap { padding: 10px 24px 0; }
   #regime-card { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 10px 14px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
   .rchip { display: inline-flex; gap: 6px; align-items: center; font-size: 12px; padding: 4px 10px; border-radius: 14px; border: 1px solid var(--border); background: var(--panel2); cursor: default; white-space: nowrap; }
@@ -131,6 +136,7 @@
 </header>
 
 <div class="controls">
+  <input id="search" type="search" placeholder="Search ticker or company name…" autocomplete="off" spellcheck="false">
   <span class="label">Show</span>
   <div class="seg" id="filter-seg">
     <button data-f="leaders" class="active" title="Stocks whose sector is Leading or Improving on the RRG, or ranked top-5 by 1m+3m excess return — the momentum playbook">Leading sectors</button>
@@ -164,7 +170,7 @@
 
     <div class="two-col">
       <div class="card">
-        <h2>Market Breadth <span style="text-transform:none;letter-spacing:0;font-weight:400">(88-stock universe)</span></h2>
+        <h2>Market Breadth <span style="text-transform:none;letter-spacing:0;font-weight:400">(<span id="universe-n">–</span>-stock universe)</span></h2>
         <div class="hint">Participation check: momentum signals are far more reliable when most stocks are in uptrends, not just a few mega-caps.</div>
         <div class="stat-grid" id="breadth-grid"></div>
         <div id="breadth-verdict"></div>
@@ -207,7 +213,7 @@
 </main>
 
 <footer>
-  <strong>Method.</strong> Universe: ~8 largest/most liquid holdings of each SPDR sector ETF (88 stocks). The momentum playbook implemented here: (1) the regime bar says whether risk-taking is being rewarded at all; (2) sector money flow + RRG quadrant pick <em>where</em> to fish; (3) the composite score picks the strongest fish — relative strength vs its own sector, money-flow indicators (MFI, OBV trend, signed dollar volume), proximity to 52-week highs, volume confirmation and trend filters. Stops are suggested at 2&times;ATR(14) below price, with position size = (account &times; risk%) &divide; stop distance. Returns use dividend/split-adjusted closes. Data: Yahoo Finance daily bars via the repo's GitHub Action. Estimates, not actual fund flows; educational tool, not investment advice.
+  <strong>Method.</strong> Universe: the full S&amp;P 500, auto-refreshed from the public constituent list by the data pipeline (universe.json); any other US ticker can be pulled in live through the search box and scored against the same percentiles. The momentum playbook implemented here: (1) the regime bar says whether risk-taking is being rewarded at all; (2) sector money flow + RRG quadrant pick <em>where</em> to fish; (3) the composite score picks the strongest fish — relative strength vs its own sector, money-flow indicators (MFI, OBV trend, signed dollar volume), proximity to 52-week highs, volume confirmation and trend filters. Stops are suggested at 2&times;ATR(14) below price, with position size = (account &times; risk%) &divide; stop distance. Returns use dividend/split-adjusted closes. Data: Yahoo Finance daily bars via the repo's GitHub Action. Estimates, not actual fund flows; educational tool, not investment advice.
 </footer>
 
 <div id="tooltip"></div>
@@ -224,7 +230,7 @@ const PROXIES = [
 ];
 const ETF_NEEDED = ["SPY", ...Object.keys(STOCK_UNIVERSE),
   "^VIX", "^TNX", "^IRX", "GC=F", "HG=F", "XLY", "XLP", "SPHB", "SPLV", "RSP", "SMH", "IWM", "HYG", "LQD"];
-const state = { etf: {}, stocks: {}, filter: "leaders", sector: null, sortK: "score", sortDir: -1, open: null, source: null, updated: null };
+const state = { etf: {}, stocks: {}, universe: STOCK_UNIVERSE, filter: "leaders", sector: null, search: "", sortK: "score", sortDir: -1, open: null, source: null, updated: null };
 
 const rowsFromArr = rows => rows.map(([ts, close, vol, adj, high, low]) => ({
   ts, close, vol, adj: adj > 0 ? adj : close,
@@ -281,7 +287,20 @@ async function fetchSetLive(tickers, target, withHL, label) {
   return ok;
 }
 
+/* universe.json = auto-refreshed S&P 500 list (ticker, name, sector);
+   the built-in 88-stock list is only the fallback. */
+async function loadUniverse() {
+  try {
+    const r = await fetch("universe.json?t=" + Date.now(), { signal: AbortSignal.timeout(8000) });
+    if (r.ok) {
+      const u = await r.json();
+      if (u?.sectors && u.count > 450) { state.universe = u.sectors; return; }
+    }
+  } catch (e) { /* keep built-in fallback */ }
+}
+
 async function loadAll() {
+  await loadUniverse();
   // preferred: JSON files committed by the GitHub Action (same-origin, fast)
   try {
     const [d, s] = await Promise.all([loadJson("data.json"), loadJson("stocks.json")]);
@@ -294,7 +313,7 @@ async function loadAll() {
     }
   } catch (e) { /* fall through to live fetch */ }
   // fallback: live via CORS proxies (slow but works when opened as a bare file)
-  const stockTickers = [...new Set(Object.values(STOCK_UNIVERSE).flatMap(l => l.map(s => s.t)))];
+  const stockTickers = [...new Set(Object.values(state.universe).flatMap(l => l.map(s => s.t)))];
   const okE = await fetchSetLive(ETF_NEEDED, state.etf, false, "sector ETFs");
   const okS = await fetchSetLive(stockTickers, state.stocks, true, "stocks");
   state.source = (okE >= ETF_NEEDED.length * 0.6 && okS >= stockTickers.length * 0.6) ? "live" : "partial";
@@ -400,6 +419,7 @@ function renderSectors() {
 
 function renderBreadth() {
   const b = model.breadth;
+  document.getElementById("universe-n").textContent = b.n;
   const pct = v => (v * 100).toFixed(0) + "%";
   const stat = (k, v, good) => `<div class="stat"><div class="k">${k}</div><div class="v" style="color:${good ? "var(--green)" : "var(--red)"}">${v}</div></div>`;
   document.getElementById("breadth-grid").innerHTML =
@@ -472,12 +492,16 @@ function sparkSvg(vals, w = 240, h = 60) {
 
 function visibleStocks() {
   let list = model.stocks;
-  if (state.sector) list = list.filter(s => s.sector === state.sector);
+  const q = state.search.toUpperCase();
+  if (q) {
+    // search spans the whole universe regardless of the sector/watchlist filter
+    list = list.filter(s => s.t.includes(q) || s.n.toUpperCase().includes(q));
+  } else if (state.sector) list = list.filter(s => s.sector === state.sector);
   else if (state.filter === "leaders") { const lead = leaderSectors(); list = list.filter(s => lead.has(s.sector)); }
   else if (state.filter === "watch") list = list.filter(s => watchlist.has(s.t));
   // sortDir -1 = the default click: descending for numbers, A→Z for text, flagged/starred first
   const k = state.sortK, d = state.sortDir;
-  return [...list].sort((a, b) => {
+  const sorted = [...list].sort((a, b) => {
     if (k === "t") return d === -1 ? a.t.localeCompare(b.t) : b.t.localeCompare(a.t);
     if (k === "sector") return d === -1 ? a.sector.localeCompare(b.sector) : b.sector.localeCompare(a.sector);
     if (k === "star") return -d * ((watchlist.has(b.t) ? 1 : 0) - (watchlist.has(a.t) ? 1 : 0));
@@ -486,6 +510,33 @@ function visibleStocks() {
     if (va == null) return 1; if (vb == null) return -1;
     return -d * (vb - va);
   });
+  // an exact ticker match always surfaces first
+  if (q) {
+    const i = sorted.findIndex(s => s.t === q);
+    if (i > 0) sorted.unshift(sorted.splice(i, 1)[0]);
+  }
+  return sorted;
+}
+
+/* fetch any US ticker that isn't in the universe, score it against the
+   universe's percentiles (no sector benchmark → RS columns stay blank) */
+const TICKER_RE = /^[A-Z][A-Z0-9.\-]{0,7}$/;
+async function liveFetch(raw) {
+  const t = raw.toUpperCase().replace(/\./g, "-"); // BRK.B → BRK-B (Yahoo format)
+  const btn = document.getElementById("fetch-live");
+  if (btn) { btn.textContent = "Fetching " + t + "…"; btn.disabled = true; }
+  const rows = await fetchTickerLive(t, true);
+  if (!rows || rows.length < 70) {
+    if (btn) { btn.textContent = `Couldn't fetch ${t} — check the ticker`; btn.disabled = false; }
+    return;
+  }
+  state.stocks[t] = rows;
+  state.universe.OTHER = state.universe.OTHER || [];
+  if (!state.universe.OTHER.some(s => s.t === t)) state.universe.OTHER.push({ t, n: t + " (fetched live)" });
+  model = buildModel(state.stocks, state.universe, state.etf);
+  state.search = t;
+  document.getElementById("search").value = t;
+  renderAll();
 }
 
 function flagsHtml(s) {
@@ -500,7 +551,7 @@ function flagsHtml(s) {
 function renderTable() {
   const list = visibleStocks();
   document.getElementById("table-title").textContent =
-    `Momentum Screener — ${state.sector ? SECTOR_NAMES[state.sector] : state.filter === "leaders" ? "leading sectors" : state.filter === "watch" ? "watchlist" : "all sectors"} (${list.length})`;
+    `Momentum Screener — ${state.search ? `search “${state.search}”` : state.sector ? SECTOR_NAMES[state.sector] : state.filter === "leaders" ? "leading sectors" : state.filter === "watch" ? "watchlist" : "all sectors"} (${list.length})`;
   const tb = document.getElementById("tbody");
   tb.innerHTML = list.map(s => {
     const sec = model.sectors[s.sector];
@@ -543,6 +594,16 @@ function renderTable() {
       </div>
     </div></td></tr>`;
   }).join("");
+  // any other US ticker: offer a live Yahoo fetch when the search looks like
+  // a ticker that isn't in the universe
+  const q = state.search.toUpperCase().replace(/\./g, "-");
+  if (state.search && TICKER_RE.test(state.search.toUpperCase()) && !model.stocks.some(s => s.t === q)) {
+    tb.innerHTML += `<tr><td colspan="15" class="l">
+      <span class="mut">“${q}” is not in the S&amp;P 500 universe.</span>
+      <button class="fetch-live-btn" id="fetch-live" style="margin-left:10px">Fetch ${q} live from Yahoo &amp; score it</button>
+    </td></tr>`;
+    document.getElementById("fetch-live").addEventListener("click", () => liveFetch(q));
+  }
   tb.querySelectorAll(".star").forEach(el => el.addEventListener("click", e => {
     e.stopPropagation();
     const t = el.dataset.t;
@@ -566,6 +627,16 @@ function renderAll() {
 }
 
 /* ================= wiring ================= */
+const searchEl = document.getElementById("search");
+searchEl.addEventListener("input", () => {
+  state.search = searchEl.value.trim(); state.open = null;
+  renderTable();
+});
+searchEl.addEventListener("keydown", e => {
+  if (e.key !== "Enter") return;
+  const q = state.search.toUpperCase().replace(/\./g, "-");
+  if (TICKER_RE.test(state.search.toUpperCase()) && model && !model.stocks.some(s => s.t === q)) liveFetch(q);
+});
 document.getElementById("filter-seg").addEventListener("click", e => {
   if (!e.target.dataset.f) return;
   state.filter = e.target.dataset.f;
@@ -591,7 +662,7 @@ for (const id of ["acct", "riskpct"]) {
 
 (async function init() {
   await loadAll();
-  model = buildModel(state.stocks, STOCK_UNIVERSE, state.etf);
+  model = buildModel(state.stocks, state.universe, state.etf);
   document.getElementById("loading").style.display = "none";
   const badge = document.getElementById("status");
   if (!model.stocks.length) {
