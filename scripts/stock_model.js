@@ -147,6 +147,37 @@ function sectorFlows(sectorRowsByT, period = 21) {
   return out;
 }
 
+/* ---------- US trading session (handles DST via the IANA timezone) ---------- */
+function marketSession(now = Date.now()) {
+  const parts = new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", hour12: false, weekday: "short", hour: "2-digit", minute: "2-digit" }).formatToParts(new Date(now));
+  const get = t => parts.find(p => p.type === t).value;
+  const wd = get("weekday");
+  if (wd === "Sat" || wd === "Sun") return "closed";
+  const mins = (+get("hour") % 24) * 60 + +get("minute");
+  if (mins >= 240 && mins < 570) return "pre";      // 04:00–09:30 ET
+  if (mins >= 570 && mins < 960) return "regular";  // 09:30–16:00 ET
+  if (mins >= 960 && mins < 1200) return "post";    // 16:00–20:00 ET
+  return "closed";
+}
+
+/* Extract the latest pre-market trade from a Yahoo chart response fetched with
+   includePrePost=true. Returns null unless the last trade is from TODAY's (ET)
+   pre-market session — yesterday's bars and market holidays never qualify. */
+function parsePreFromChart(j, now = Date.now()) {
+  const res = j?.chart?.result?.[0];
+  const q = res?.indicators?.quote?.[0];
+  if (!res?.timestamp || !q || !Array.isArray(q.close)) return null;
+  let i = res.timestamp.length - 1;
+  while (i >= 0 && q.close[i] == null) i--;
+  if (i < 0) return null;
+  const ts = res.timestamp[i] * 1000;
+  const regStart = (res.meta?.currentTradingPeriod?.regular?.start || 0) * 1000;
+  if (!regStart || ts >= regStart) return null; // not a pre-market trade
+  const etDay = d => new Date(d).toLocaleDateString("en-CA", { timeZone: "America/New_York" });
+  if (etDay(ts) !== etDay(now)) return null;    // stale session
+  return { price: q.close[i], ts };
+}
+
 /* ---------- composite scoring ---------- */
 function pctRank(sortedVals, v) { // fraction of universe at or below v
   if (v == null || !sortedVals.length) return 0.5;
@@ -238,5 +269,5 @@ function buildModel(stockSeries, universe, etfSeries, opts = {}) {
 }
 
 if (typeof module !== "undefined") {
-  module.exports = { smaLast, nRet, mfi, obvTrend, dollarFlow, atr, volSurge, stockMetrics, rrgPoint, sectorFlows, pctRank, buildModel, SCORE_WEIGHTS };
+  module.exports = { smaLast, nRet, mfi, obvTrend, dollarFlow, atr, volSurge, stockMetrics, rrgPoint, sectorFlows, pctRank, buildModel, SCORE_WEIGHTS, marketSession, parsePreFromChart };
 }

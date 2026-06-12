@@ -6,6 +6,7 @@
 <title>Money Flow Tracker — Market Rotation Monitor</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/d3-sankey/0.12.3/d3-sankey.min.js"></script>
+<script src="scripts/stock_model.js"></script>
 <style>
   :root {
     --bg: #0d1117; --panel: #161b22; --panel2: #1c2128; --border: #2d333b;
@@ -141,7 +142,7 @@
   </div>
   <div class="card">
     <h2>Net Flow Ranking</h2>
-    <div class="hint">Net rotation pressure per asset ($M/day, relative to group).</div>
+    <div class="hint">Net rotation pressure per asset ($M/day, relative to group).<span id="pre-note-rank"></span></div>
     <div class="stat-grid">
       <div class="stat"><div class="k">Top inflow</div><div class="v pos" id="stat-in">–</div></div>
       <div class="stat"><div class="k">Top outflow</div><div class="v neg" id="stat-out">–</div></div>
@@ -399,6 +400,45 @@ async function refreshQuotes() {
   return updated;
 }
 
+/* ---- pre-market top-up: Mon–Fri 04:00–09:30 ET, today's bar gets the latest
+   pre-market trade so flows are meaningful before the open — clearly labeled
+   on every view. ?pretest forces the UI for testing outside those hours. ---- */
+const FORCE_PRE = new URLSearchParams(location.search).has("pretest");
+const session = () => FORCE_PRE ? "pre" : marketSession();
+
+async function fetchPreQuote(t) {
+  const base = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(t)}?range=1d&interval=5m&includePrePost=true`;
+  for (const wrap of PROXIES) {
+    try {
+      const r = await fetch(wrap(base), { signal: AbortSignal.timeout(10000) });
+      if (!r.ok) continue;
+      const q = parsePreFromChart(await r.json());
+      if (q) return q;
+    } catch (e) { /* next proxy */ }
+  }
+  return null;
+}
+
+async function refreshPreMarket() {
+  if (session() !== "pre") { state.preInfo = null; return 0; }
+  const tickers = GROUPS[state.group].assets.map(a => a.t).filter(t => state.data[t]);
+  let updated = 0, asOf = 0, idx = 0;
+  async function worker() {
+    while (idx < tickers.length) {
+      const t = tickers[idx++];
+      let q = await fetchPreQuote(t);
+      if (!q && FORCE_PRE) { // debug mode only: fabricate so the UI is inspectable any time
+        const rows = state.data[t];
+        q = { price: rows[rows.length - 1].close * 1.012, ts: Date.now() };
+      }
+      if (q && applyQuote(t, q.price, null, q.ts)) { updated++; asOf = Math.max(asOf, q.ts); }
+    }
+  }
+  await Promise.all([worker(), worker(), worker(), worker()]);
+  state.preInfo = updated ? { asOf } : null;
+  return updated;
+}
+
 let refreshing = false;
 async function doRefresh() {
   if (refreshing || document.hidden || state.source === "sample") return;
@@ -408,10 +448,12 @@ async function doRefresh() {
   try {
     const fresh = state.jsonUpdated ? await reloadDataJson() : false; // same-origin, most reliable
     const n = await refreshQuotes();
+    const p = await refreshPreMarket(); // after regular quotes so pre-market prices win on today's bar
     const el = document.getElementById("updated");
-    if (n > 0 || fresh) {
+    if (n > 0 || fresh || p > 0) {
       render();
-      el.textContent = n > 0 ? `Updated ${fmtTimeTZ(Date.now())} · ${n} tickers` : `Data updated ${fmtDateTimeTZ(state.jsonUpdated)}`;
+      el.textContent = p > 0 ? `PRE-MARKET ${fmtTimeTZ(state.preInfo.asOf)} · ${p} tickers`
+        : n > 0 ? `Updated ${fmtTimeTZ(Date.now())} · ${n} tickers` : `Data updated ${fmtDateTimeTZ(state.jsonUpdated)}`;
       el.classList.add("flash");
       setTimeout(() => el.classList.remove("flash"), 1200);
     } else {
@@ -669,6 +711,12 @@ function render() {
   const model = computeFlows(g.assets, state.data, state.period);
   document.getElementById("view-title").textContent = VIEW_META[state.view].title();
   document.getElementById("view-hint").innerHTML = VIEW_META[state.view].hint();
+  // pre-market disclosure on every chart that contains those prices
+  const preNote = state.preInfo
+    ? ` <span style="color:var(--amber);font-weight:600">· includes PRE-MARKET prices (as of ${fmtTimeTZ(state.preInfo.asOf)}) — thin volume, can change at the open</span>`
+    : "";
+  if (preNote) document.getElementById("view-hint").innerHTML += preNote;
+  document.getElementById("pre-note-rank").innerHTML = preNote;
   const sank = document.getElementById("sankey"), rrgEl = document.getElementById("rrg"), histEl = document.getElementById("history");
   sank.style.display = state.view === "flow" ? "" : "none";
   rrgEl.style.display = state.view === "rrg" ? "" : "none";
@@ -957,6 +1005,7 @@ document.getElementById("group-seg").addEventListener("click", e => {
   state.group = e.target.dataset.g;
   document.querySelectorAll("#group-seg button").forEach(b => b.classList.toggle("active", b === e.target));
   render();
+  if (session() === "pre") doRefresh(); // the new group's tickers need their pre-market top-up
 });
 document.getElementById("period-seg").addEventListener("click", e => {
   if (!e.target.dataset.p) return;

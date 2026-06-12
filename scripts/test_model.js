@@ -4,7 +4,7 @@
 const fs = require("fs");
 const path = require("path");
 const { STOCK_UNIVERSE, SECTOR_NAMES } = require("./stock_universe");
-const { buildModel, mfi, atr, nRet } = require("./stock_model");
+const { buildModel, mfi, atr, nRet, marketSession, parsePreFromChart } = require("./stock_model");
 
 const ROOT = path.join(__dirname, "..");
 const toRows = arr => arr.map(([ts, close, vol, adj, high, low]) => ({
@@ -60,6 +60,28 @@ check(mfi(nvda) >= 0 && mfi(nvda) <= 100, `NVDA MFI = ${mfi(nvda).toFixed(1)}`);
 // breadth fractions in [0,1]
 const b = model.breadth;
 check([b.pctAbove20, b.pctAbove50, b.advancers, b.near52].every(v => v >= 0 && v <= 1), "breadth fractions in [0,1]");
+
+// market session boundaries, summer (EDT, UTC−4) and winter (EST, UTC−5)
+const S = iso => marketSession(Date.parse(iso));
+check(S("2026-06-12T07:59:00Z") === "closed", "Fri 03:59 ET → closed");
+check(S("2026-06-12T08:00:00Z") === "pre", "Fri 04:00 ET → pre");
+check(S("2026-06-12T13:29:00Z") === "pre", "Fri 09:29 ET → pre");
+check(S("2026-06-12T13:30:00Z") === "regular", "Fri 09:30 ET → regular");
+check(S("2026-06-12T20:30:00Z") === "post", "Fri 16:30 ET → post");
+check(S("2026-06-13T14:00:00Z") === "closed", "Saturday → closed");
+check(S("2026-01-12T14:00:00Z") === "pre", "winter Mon 09:00 ET → pre (DST handled)");
+check(S("2026-01-12T14:30:00Z") === "regular", "winter Mon 09:30 ET → regular");
+
+// pre-market chart parser
+const mkChart = (tsSec, closes, regStartSec) => ({ chart: { result: [{ timestamp: tsSec, meta: { currentTradingPeriod: { regular: { start: regStartSec } } }, indicators: { quote: [{ close: closes }] } }] } });
+const NOW = Date.parse("2026-06-12T12:00:00Z");          // 08:00 ET, pre-market
+const REG = Date.parse("2026-06-12T13:30:00Z") / 1000;   // 09:30 ET open
+const preQ = parsePreFromChart(mkChart([NOW / 1000 - 600, NOW / 1000 - 300], [10.5, 10.6], REG), NOW);
+check(preQ && preQ.price === 10.6, "parser returns latest pre-market trade");
+check(parsePreFromChart(mkChart([REG + 60], [11], REG), NOW) === null, "parser rejects regular-session trade");
+const Y = NOW / 1000 - 86400;
+check(parsePreFromChart(mkChart([Y], [9.9], REG), NOW) === null, "parser rejects yesterday's stale bar");
+check(parsePreFromChart(mkChart([NOW / 1000 - 300], [null], REG), NOW) === null, "parser rejects all-null closes");
 
 console.log("\n--- Sector ranking (1m+3m excess vs SPY) ---");
 for (const s of model.secList) {

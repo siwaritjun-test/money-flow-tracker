@@ -39,6 +39,8 @@
   #search::placeholder { color: var(--muted); }
   .fetch-live-btn { background: var(--panel2); border: 1px solid var(--blue); color: var(--blue); border-radius: 6px; padding: 5px 12px; font-size: 12px; cursor: pointer; }
   .fetch-live-btn:hover { background: var(--blue); color: #fff; }
+  #pre-banner { margin: 10px 24px 0; background: rgba(210,153,34,.08); border: 1px solid var(--amber); border-radius: 10px; padding: 9px 14px; font-size: 12.5px; color: var(--amber); }
+  .pre-px { color: var(--amber); font-weight: 700; }
   #regime-wrap { padding: 10px 24px 0; }
   #regime-card { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 10px 14px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
   .rchip { display: inline-flex; gap: 6px; align-items: center; font-size: 12px; padding: 4px 10px; border-radius: 14px; border: 1px solid var(--border); background: var(--panel2); cursor: default; white-space: nowrap; }
@@ -149,6 +151,8 @@
     Risk/trade % <input id="riskpct" type="number" min="0.1" max="10" step="0.1" value="1">
   </div>
 </div>
+
+<div id="pre-banner" style="display:none"><b>US PRE-MARKET session.</b> Prices tagged <b>PRE</b> are pre-market trades (thin volume — they can change sharply at the 09:30 ET open). All charts, scores, flows and screener columns below use the last regular-session close.</div>
 
 <div id="regime-wrap" style="display:none">
   <div id="regime-card">
@@ -459,8 +463,8 @@ function renderPicks() {
     const sp = stopAndSize(s);
     return `<div class="pick" data-t="${s.t}">
       <div class="top"><span class="tk">${s.t}</span><span class="score-badge" style="color:${scoreColor(s.score)};background:transparent;border:1px solid ${scoreColor(s.score)}">${s.score.toFixed(0)}</span></div>
-      <div class="nm">${esc(s.n)} · ${SECTOR_NAMES[s.sector]}</div>
-      <div class="mets">1m <b class="${cls(s.ret21)}">${fmtPct(s.ret21)}</b> · vs sector <b class="${cls(s.rs21)}">${fmtPct(s.rs21)}</b><br>
+      <div class="nm">${esc(s.n)} · ${SECTOR_NAMES[s.sector] || s.sector}</div>
+      <div class="mets">${state.pre[s.t] ? preHtml(s, true) + "<br>" : ""}1m <b class="${cls(s.ret21)}">${fmtPct(s.ret21)}</b> · vs sector <b class="${cls(s.rs21)}">${fmtPct(s.rs21)}</b><br>
       MFI <b>${s.mfi == null ? "–" : s.mfi.toFixed(0)}</b> · OBV <b class="${cls(s.obvT)}">${s.obvT == null ? "–" : (s.obvT >= 0 ? "+" : "") + s.obvT.toFixed(1)}d</b><br>
       ${sp ? `Stop ~<b>$${fmtPx(sp.stop)}</b> · Size <b>${sp.shares}</b> sh` : ""}</div>
     </div>`;
@@ -516,6 +520,49 @@ function visibleStocks() {
     if (i > 0) sorted.unshift(sorted.splice(i, 1)[0]);
   }
   return sorted;
+}
+
+/* ---- pre-market quotes (Mon–Fri 04:00–09:30 ET): fetched for the top picks
+   and any opened detail row, shown tagged PRE — never mixed into the scores.
+   ?pretest forces the UI for testing outside those hours. ---- */
+const FORCE_PRE = new URLSearchParams(location.search).has("pretest");
+const session = () => FORCE_PRE ? "pre" : marketSession();
+const fmtT7 = ts => new Date(ts).toLocaleTimeString("en-GB", { timeZone: "Asia/Bangkok", hour: "2-digit", minute: "2-digit" }) + " GMT+7";
+state.pre = {}; // ticker → { price, ts }
+
+async function fetchPreQuote(t) {
+  const base = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(t)}?range=1d&interval=5m&includePrePost=true`;
+  for (const wrap of PROXIES) {
+    try {
+      const r = await fetch(wrap(base), { signal: AbortSignal.timeout(10000) });
+      if (!r.ok) continue;
+      const q = parsePreFromChart(await r.json());
+      if (q) return q;
+    } catch (e) { /* next proxy */ }
+  }
+  return null;
+}
+
+async function preTopUp(tickers) {
+  if (session() !== "pre") return false;
+  let got = false;
+  await Promise.all(tickers.filter(t => !state.pre[t]).map(async t => {
+    let q = await fetchPreQuote(t);
+    if (!q && FORCE_PRE) { // debug mode only: fabricate so the UI is inspectable any time
+      const s = model && model.stocks.find(x => x.t === t);
+      if (s) q = { price: s.price * 1.012, ts: Date.now() };
+    }
+    if (q) { state.pre[t] = q; got = true; }
+  }));
+  return got;
+}
+
+function preHtml(s, brief = false) {
+  const q = state.pre[s.t];
+  if (!q) return "";
+  const chg = q.price / s.price - 1;
+  const txt = `PRE <span class="pre-px">$${fmtPx(q.price)} (${fmtPct(chg)})</span>`;
+  return brief ? txt : txt + ` <span class="mut">as of ${fmtT7(q.ts)}</span>`;
 }
 
 /* fetch any US ticker that isn't in the universe, score it against the
@@ -577,9 +624,10 @@ function renderTable() {
     const sp = stopAndSize(s);
     const posValue = sp ? sp.shares * s.price : 0;
     return main + `<tr class="detail"><td colspan="15"><div class="detail-grid">
-      <div>${sparkSvg(s.spark)}<div class="mut" style="font-size:11px;margin-top:2px">90 trading days, adjusted close + 20d SMA</div></div>
+      <div>${sparkSvg(s.spark)}<div class="mut" style="font-size:11px;margin-top:2px">90 trading days, adjusted close + 20d SMA${session() === "pre" ? ' — <span style="color:var(--amber)">regular sessions only, PRE price not in this chart</span>' : ""}</div></div>
       <div style="display:flex;gap:28px;flex-wrap:wrap">
         <dl>
+          ${state.pre[s.t] ? `<dt>Pre-market</dt><dd>${preHtml(s)}</dd>` : ""}
           <dt>ATR(14)</dt><dd>$${s.atr == null ? "–" : s.atr.toFixed(2)} (${s.atr == null ? "–" : (s.atr / s.price * 100).toFixed(1)}%/day)</dd>
           <dt>Suggested stop (2×ATR)</dt><dd><b>$${sp ? fmtPx(sp.stop) : "–"}</b> (−${sp ? (sp.stopDist / s.price * 100).toFixed(1) : "–"}%)</dd>
           <dt>Position size @ risk $${sp ? sp.riskDollar.toFixed(0) : "–"}</dt><dd><b>${sp ? sp.shares : "–"} shares</b> ≈ $${posValue.toFixed(0)}</dd>
@@ -615,6 +663,9 @@ function renderTable() {
   tb.querySelectorAll("tr.stock-row").forEach(tr => tr.addEventListener("click", () => {
     state.open = state.open === tr.dataset.t ? null : tr.dataset.t;
     renderTable();
+    if (state.open && session() === "pre" && !state.pre[state.open]) {
+      preTopUp([state.open]).then(got => got && renderTable());
+    }
   }));
 }
 
@@ -677,6 +728,12 @@ for (const id of ["acct", "riskpct"]) {
     "Data updated " + new Date(state.updated).toLocaleString("en-GB", { timeZone: "Asia/Bangkok", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) + " GMT+7";
   document.getElementById("content").style.display = "flex";
   renderAll();
+  if (session() === "pre") {
+    document.getElementById("pre-banner").style.display = "";
+    const lead = leaderSectors();
+    const picks = model.stocks.filter(s => lead.has(s.sector)).slice(0, 5).map(s => s.t);
+    preTopUp(picks).then(got => { if (got) { renderPicks(); renderTable(); } });
+  }
 })();
 </script>
 </body>
