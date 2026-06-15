@@ -69,7 +69,7 @@ function atr(rows, n = 14) {
 function volSurge(rows, short = 5, long = 63) { // recent volume vs its norm; >1 = waking up
   if (rows.length < long) return null;
   const vols = rows.map(r => r.vol);
-  const a = smaLast(vols, short), b = smaLast(vols.slice(0, vols.length), long);
+  const a = smaLast(vols, short), b = smaLast(vols, long);
   return b ? a / b : null;
 }
 
