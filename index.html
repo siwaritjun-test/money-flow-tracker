@@ -57,6 +57,7 @@
   @keyframes spin { to { transform: rotate(360deg); } }
   footer { padding: 0 24px 24px; font-size: 11px; color: var(--muted); line-height: 1.6; max-width: 900px; }
   #updated { font-size: 11px; color: var(--muted); margin-left: auto; transition: color .3s; }
+  #updated.stale { color: var(--amber); }
   #updated.flash { color: var(--green); }
   #refresh-now { background: var(--panel); border: 1px solid var(--border); color: var(--muted); border-radius: 8px; padding: 7px 14px; font-size: 13px; cursor: pointer; }
   #refresh-now:hover { color: var(--text); border-color: var(--blue); }
@@ -447,18 +448,20 @@ async function doRefresh() {
   const btn = document.getElementById("refresh-now");
   btn.classList.add("busy");
   try {
-    const fresh = state.jsonUpdated ? await reloadDataJson() : false; // same-origin, most reliable
+    const fresh = await reloadDataJson(); // same-origin, most reliable; picks up new Action commits
     const n = await refreshQuotes();
     const p = await refreshPreMarket(); // after regular quotes so pre-market prices win on today's bar
     const el = document.getElementById("updated");
     if (n > 0 || fresh || p > 0) {
       render();
-      el.textContent = p > 0 ? `PRE-MARKET ${fmtTimeTZ(state.preInfo.asOf)} · ${p} tickers`
-        : n > 0 ? `Updated ${fmtTimeTZ(Date.now())} · ${n} tickers` : `Data updated ${fmtDateTimeTZ(state.jsonUpdated)}`;
+      const note = p > 0 ? `PRE-MARKET ${fmtTimeTZ(state.preInfo.asOf)} · ${p} tickers`
+        : n > 0 ? `live quotes ${fmtTimeTZ(Date.now())} · ${n} tickers`
+        : `refreshed daily data`;
+      setUpdatedLabel(note);
       el.classList.add("flash");
       setTimeout(() => el.classList.remove("flash"), 1200);
     } else {
-      el.textContent = `Checked ${fmtTimeTZ(Date.now())} · no new quotes`;
+      setUpdatedLabel(`checked ${fmtTimeTZ(Date.now())} · no new quotes`);
     }
   } finally {
     refreshing = false;
@@ -691,6 +694,23 @@ const fmtFlow = v => (v < 0 ? "−$" : "+$") + fmtM(Math.abs(v));
 const TZ = "Asia/Bangkok"; // header timestamps pinned to GMT+7
 const fmtTimeTZ = d => new Date(d).toLocaleTimeString("en-GB", { timeZone: TZ, hour: "2-digit", minute: "2-digit", second: "2-digit" }) + " GMT+7";
 const fmtDateTimeTZ = d => new Date(d).toLocaleString("en-GB", { timeZone: TZ, day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) + " GMT+7";
+
+/* Single place that renders the header status line, so the timestamp is never silently
+   frozen: it shows when the committed daily data is from, appends the last live-quote
+   top-up, and flags (amber) when the GitHub Action's feed is more than a day behind so a
+   stale page is obvious at a glance instead of looking like fresh data. */
+function setUpdatedLabel(liveNote) {
+  const el = document.getElementById("updated");
+  if (!el) return;
+  const parts = [];
+  if (state.jsonUpdated) parts.push(`Data as of ${fmtDateTimeTZ(state.jsonUpdated)}`);
+  if (liveNote) parts.push(liveNote);
+  const ageH = state.jsonUpdated ? (Date.now() - Date.parse(state.jsonUpdated)) / 36e5 : 0;
+  const stale = ageH > 30; // longer than an overnight gap → the daily feed hasn't refreshed
+  if (stale) parts.push(`⚠ daily feed ${Math.round(ageH)}h behind`);
+  el.classList.toggle("stale", stale);
+  el.textContent = parts.join(" · ");
+}
 const tooltip = document.getElementById("tooltip");
 function showTip(html, ev) {
   tooltip.innerHTML = html; tooltip.style.display = "block";
@@ -1041,9 +1061,9 @@ addEventListener("resize", () => render());
   badge.className = "badge " + (state.source === "sample" ? "sample" : missing ? "sample" : "live");
   if (missing) badge.title = "Some tickers failed to load — group averages are computed from the tickers shown.";
   render();
-  if (state.jsonUpdated) document.getElementById("updated").textContent = "Data updated " + fmtDateTimeTZ(state.jsonUpdated);
+  setUpdatedLabel();
   startTimer();
-  if (state.jsonUpdated) doRefresh(); // top up cached data with current intraday quotes
+  if (state.source !== "sample") doRefresh(); // top up with live quotes & re-check data.json
 })();
 </script>
 </body>
