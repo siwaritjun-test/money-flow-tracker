@@ -113,6 +113,30 @@ const puppeteer = require("puppeteer-core");
   const firstT = await page.$eval("#tbody tr.stock-row", tr => tr.dataset.t);
   firstT === "NVDA" ? pass("deep link ?q=NVDA filters to NVDA") : fail(`deep link got ${firstT}`);
 
+  // 11) forward test: Track a top pick -> saved, badged, and listed on forward.html
+  await page.goto("http://localhost:8123/stocks.html", { waitUntil: "networkidle2", timeout: 60000 });
+  await page.waitForSelector("#picks .pick [data-ft]", { timeout: 30000 });
+  await page.evaluate(() => localStorage.removeItem("mft-forward-v1"));
+  const ftT = await page.$eval("#picks .pick", el => el.dataset.t);
+  await page.click("#picks .pick [data-ft]");
+  await new Promise(r => setTimeout(r, 300));
+  const saved = await page.evaluate(() => JSON.parse(localStorage.getItem("mft-forward-v1") || "[]"));
+  saved.length === 1 && saved[0].t === ftT && saved[0].entryPrice > 0 && saved[0].signal
+    ? pass(`Track saved ${ftT} at $${saved[0].entryPrice} with its signal`) : fail("Track did not save a position");
+  const badged = await page.$$eval(`tr.stock-row[data-t="${ftT}"] .ft-badge`, e => e.length);
+  badged ? pass("screener row shows the FT badge") : fail("no FT badge on the tracked row");
+  await page.goto("http://localhost:8123/forward.html", { waitUntil: "networkidle2", timeout: 60000 });
+  await page.waitForSelector("#open-body tr [data-close]", { timeout: 30000 });
+  const ftRow = await page.$eval("#open-body tr", tr => tr.innerText);
+  ftRow.includes(ftT) ? pass(`forward.html lists ${ftT} as open`) : fail("forward.html did not list the pick");
+  const closeSel = "#open-body [data-close]";
+  await page.click(closeSel);
+  await page.click(closeSel); // second click confirms
+  await new Promise(r => setTimeout(r, 300));
+  const closedN = await page.$$eval("#closed-body tr [data-delete]", e => e.length);
+  closedN === 1 ? pass("Stop tracking (confirmed) moves it to Closed") : fail("Stop tracking did not close the position");
+  await page.evaluate(() => localStorage.removeItem("mft-forward-v1"));
+
   await page.screenshot({ path: "C:\\Users\\User\\ui_test.png" });
   await browser.close();
   console.log(process.exitCode ? "\nUI TESTS FAILED" : "\nUI TESTS PASSED");

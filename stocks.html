@@ -123,6 +123,19 @@
   footer { padding: 0 24px 24px; font-size: 11px; color: var(--muted); line-height: 1.6; max-width: 980px; }
   #tooltip { position: fixed; pointer-events: none; background: var(--panel2); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; font-size: 12px; line-height: 1.5; display: none; z-index: 10; max-width: 300px; box-shadow: 0 8px 24px rgba(0,0,0,.5); }
   .table-wrap { overflow-x: auto; }
+  /* forward test */
+  .ft-btn { background: var(--panel2); border: 1px solid var(--purple); color: var(--purple); border-radius: 6px; padding: 5px 12px; font-size: 12px; font-weight: 600; cursor: pointer; }
+  .ft-btn:hover { background: var(--purple); color: #0d1117; }
+  .ft-btn.small { padding: 2px 8px; font-size: 11px; margin-top: 7px; }
+  .ft-on { display: inline-flex; gap: 8px; align-items: center; font-size: 12px; color: var(--purple); }
+  .ft-on a { color: var(--blue); text-decoration: none; }
+  .ft-on a:hover { text-decoration: underline; }
+  .ft-badge { font-size: 9.5px; font-weight: 800; letter-spacing: .4px; padding: 1px 5px; border-radius: 6px; margin-left: 6px; background: rgba(179,146,240,.18); color: var(--purple); vertical-align: 1px; }
+  #ft-card .ft-row { display: flex; flex-wrap: wrap; gap: 8px; }
+  #ft-card .ft-chip { display: inline-flex; gap: 6px; align-items: baseline; font-size: 12px; padding: 4px 10px; border-radius: 14px; border: 1px solid var(--border); background: var(--panel2); font-variant-numeric: tabular-nums; }
+  #ft-card .ft-chip b { font-weight: 700; }
+  #ft-card .ft-sum { font-size: 12.5px; color: var(--muted); margin-bottom: 10px; }
+  #ft-card .ft-sum a { color: var(--blue); text-decoration: none; margin-left: 6px; }
 </style>
 </head>
 <body>
@@ -133,6 +146,7 @@
     <a href="stocks.html" class="active">Stock Picker</a>
     <a href="themes.html">Themes</a>
     <a href="assets.html">Asset Guide</a>
+    <a href="forward.html">Forward Test</a>
   </nav>
   <span id="status" class="badge">loading…</span>
   <span id="updated"></span>
@@ -187,6 +201,12 @@
       </div>
     </div>
 
+    <div class="card" id="ft-card" style="display:none">
+      <h2>Forward Test</h2>
+      <div class="ft-sum" id="ft-sum"></div>
+      <div class="ft-row" id="ft-chips"></div>
+    </div>
+
     <div class="card">
       <h2 id="table-title">Momentum Screener</h2>
       <div class="hint">Composite score = relative strength vs own sector (1m 15% + 3m 20%) &middot; MFI-14 (12.5%) &middot; OBV money-flow trend (12.5%) &middot; distance to 52w high (15%) &middot; volume surge (10%) &middot; above 20/50-day SMA (15%). Cross-sectional metrics are percentile-ranked across the universe. Click a column to sort, a row for stop-loss &amp; position-size detail. Flags: <span class="flag f-acc">ACC</span> accumulation divergence (price down, OBV up) &middot; <span class="flag f-dist">DIST</span> distribution (price up, OBV down) &middot; <span class="flag f-vol">VOL</span> unusual volume today (&ge;2&times; normal) &middot; <span class="flag f-hi">HI</span> within 2% of 52-week high.</div>
@@ -225,57 +245,14 @@
 
 <script src="scripts/stock_universe.js"></script>
 <script src="scripts/stock_model.js"></script>
+<script src="scripts/market_data.js"></script>
+<script src="scripts/forward_model.js"></script>
+<script src="scripts/forward_store.js"></script>
 <script>
 /* ================= data layer ================= */
-const PROXIES = [
-  u => u,
-  u => "https://api.allorigins.win/raw?url=" + encodeURIComponent(u),
-  u => "https://corsproxy.io/?url=" + encodeURIComponent(u),
-  u => "https://api.codetabs.com/v1/proxy?quest=" + encodeURIComponent(u),
-];
 const ETF_NEEDED = ["SPY", ...Object.keys(STOCK_UNIVERSE),
   "^VIX", "^TNX", "^IRX", "GC=F", "HG=F", "XLY", "XLP", "SPHB", "SPLV", "RSP", "SMH", "IWM", "HYG", "LQD"];
 const state = { etf: {}, stocks: {}, universe: STOCK_UNIVERSE, filter: "leaders", sector: null, search: "", sortK: "score", sortDir: -1, open: null, source: null, updated: null };
-
-const rowsFromArr = rows => rows.map(([ts, close, vol, adj, high, low]) => ({
-  ts, close, vol, adj: adj > 0 ? adj : close,
-  high: high > 0 ? high : close, low: low > 0 ? low : close,
-}));
-
-async function loadJson(file) {
-  const r = await fetch(file + "?t=" + Date.now(), { signal: AbortSignal.timeout(10000) });
-  if (!r.ok) throw new Error("HTTP " + r.status);
-  const j = await r.json();
-  if (!j?.series) throw new Error("bad payload");
-  return j;
-}
-
-async function fetchTickerLive(t, withHL) {
-  const base = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(t)}?range=1y&interval=1d`;
-  for (const wrap of PROXIES) {
-    try {
-      const r = await fetch(wrap(base), { signal: AbortSignal.timeout(12000) });
-      if (!r.ok) continue;
-      const res = (await r.json())?.chart?.result?.[0];
-      if (!res?.timestamp) continue;
-      const q = res.indicators.quote[0];
-      const adj = res.indicators.adjclose?.[0]?.adjclose;
-      const byDay = new Map();
-      for (let i = 0; i < res.timestamp.length; i++) {
-        const c = q.close[i], v = q.volume[i];
-        if (c == null || v == null || !(c > 0) || v < 0) continue;
-        const ts = res.timestamp[i] * 1000;
-        byDay.set(new Date(ts).toISOString().slice(0, 10), {
-          ts, close: c, vol: v, adj: (adj && adj[i] > 0) ? adj[i] : c,
-          high: (withHL && q.high[i] > 0) ? q.high[i] : c, low: (withHL && q.low[i] > 0) ? q.low[i] : c,
-        });
-      }
-      const rows = [...byDay.values()].sort((a, b) => a.ts - b.ts);
-      if (rows.length > 25) return rows;
-    } catch (e) { /* next proxy */ }
-  }
-  return null;
-}
 
 async function fetchSetLive(tickers, target, withHL, label) {
   let done = 0, ok = 0, idx = 0;
@@ -402,6 +379,70 @@ const leaderSectors = () => new Set(model.secList
   .filter(s => (s.rrg && (s.rrg.quad === "Leading" || s.rrg.quad === "Improving")) || s.rank <= 5)
   .map(s => s.t));
 
+/* ================= forward test ================= */
+/* Starting a forward test freezes the pick as it looks right now: the price on
+   screen, SPY alongside it, the suggested 2×ATR stop and the signal itself, so
+   later you can ask whether high scores or leading sectors actually paid. */
+function startForward(t) {
+  const s = model.stocks.find(x => x.t === t);
+  const spy = state.etf.SPY && state.etf.SPY[state.etf.SPY.length - 1];
+  if (!s || ForwardStore.openFor(t)) return;
+  const sec = model.sectors[s.sector];
+  const sp = stopAndSize(s);
+  ForwardStore.add({
+    t: s.t, name: s.n, sector: s.sector,
+    entryDate: dayOf(s.lastTs), entryPrice: s.price,
+    benchEntry: spy ? spy.close : null,
+    stop: sp ? +sp.stop.toFixed(2) : null,
+    signal: {
+      score: +s.score.toFixed(1), quad: sec && sec.rrg ? sec.rrg.quad : null,
+      sectorRank: sec ? sec.rank : null, rs21: s.rs21, mfi: s.mfi, regime: regimeVerdict,
+    },
+  });
+  renderForwardCard(); renderPicks(); renderTable();
+}
+
+function forwardPerf(pos) {
+  const rows = state.stocks[pos.t];
+  return rows ? positionPerf(pos, rows, state.etf.SPY) : null;
+}
+
+function renderForwardCard() {
+  const open = ForwardStore.open();
+  const card = document.getElementById("ft-card");
+  card.style.display = open.length ? "" : "none";
+  if (!open.length) return;
+  const perfs = open.map(p => ({ p, perf: forwardPerf(p) })).filter(x => x.perf);
+  const sum = summarize(perfs.map(x => x.perf));
+  document.getElementById("ft-sum").innerHTML =
+    `${open.length} open · average <b class="${cls(sum.avgRet)}">${fmtPct(sum.avgRet)}</b>` +
+    (sum.avgExcess != null ? ` · vs SPY <b class="${cls(sum.avgExcess)}">${fmtPct(sum.avgExcess)}</b>` : "") +
+    `<a href="forward.html">Full forward-test report →</a>`;
+  document.getElementById("ft-chips").innerHTML = perfs
+    .sort((a, b) => b.perf.ret - a.perf.ret)
+    .map(({ p, perf }) => `<span class="ft-chip" title="Added ${p.entryDate} at $${fmtPx(p.entryPrice)}">${p.t} <b class="${cls(perf.ret)}">${fmtPct(perf.ret)}</b></span>`)
+    .join("");
+}
+
+function forwardControl(t, small) {
+  const pos = ForwardStore.openFor(t);
+  if (!pos) {
+    return `<button class="ft-btn${small ? " small" : ""}" data-ft="${t}" title="Track this pick from today's price until you stop it">&#9654; ${small ? "Track" : "Start forward test"}</button>`;
+  }
+  const perf = forwardPerf(pos);
+  const ret = perf ? ` <b class="${cls(perf.ret)}">${fmtPct(perf.ret)}</b>` : "";
+  return small
+    ? `<span class="ft-on" style="margin-top:7px">&#9679; Tracking${ret}</span>`
+    : `<span class="ft-on">&#9679; Forward testing since ${pos.entryDate} at $${fmtPx(pos.entryPrice)}${ret} <a href="forward.html">View →</a></span>`;
+}
+
+function wireForwardButtons(root) {
+  root.querySelectorAll("[data-ft]").forEach(b => b.addEventListener("click", e => {
+    e.stopPropagation();
+    startForward(b.dataset.ft);
+  }));
+}
+
 /* ================= rendering ================= */
 function renderSectors() {
   const el = document.getElementById("sector-strip");
@@ -468,8 +509,10 @@ function renderPicks() {
       <div class="mets">${state.pre[s.t] ? preHtml(s, true) + "<br>" : ""}1m <b class="${cls(s.ret21)}">${fmtPct(s.ret21)}</b> · vs sector <b class="${cls(s.rs21)}">${fmtPct(s.rs21)}</b><br>
       MFI <b>${s.mfi == null ? "–" : s.mfi.toFixed(0)}</b> · OBV <b class="${cls(s.obvT)}">${s.obvT == null ? "–" : (s.obvT >= 0 ? "+" : "") + s.obvT.toFixed(1)}d</b><br>
       ${sp ? `Stop ~<b>$${fmtPx(sp.stop)}</b> · Size <b>${sp.shares}</b> sh` : ""}</div>
+      ${forwardControl(s.t, true)}
     </div>`;
   }).join("") || '<div class="hint">No leading-sector stocks available.</div>';
+  wireForwardButtons(document.getElementById("picks"));
   document.querySelectorAll("#picks .pick").forEach(c => c.addEventListener("click", () => {
     state.filter = "all"; state.sector = null; state.open = c.dataset.t;
     document.querySelectorAll("#filter-seg button").forEach(b => b.classList.toggle("active", b.dataset.f === "all"));
@@ -606,7 +649,7 @@ function renderTable() {
     const quad = sec && sec.rrg ? sec.rrg.quad : "–";
     const main = `<tr class="stock-row" data-t="${s.t}">
       <td class="l"><span class="star ${watchlist.has(s.t) ? "on" : ""}" data-t="${s.t}">&#9733;</span></td>
-      <td class="l tk-cell">${s.t}<span class="mut" style="font-weight:400"> ${esc(s.n)}</span></td>
+      <td class="l tk-cell">${s.t}${ForwardStore.openFor(s.t) ? '<span class="ft-badge" title="In your forward test">FT</span>' : ""}<span class="mut" style="font-weight:400"> ${esc(s.n)}</span></td>
       <td class="l"><span class="sec-chip q-${quad}">${s.sector}</span></td>
       <td><span class="scorebar"><span class="bb"><span class="bf" style="width:${s.score.toFixed(0)}%;background:${scoreColor(s.score)}"></span></span><b style="color:${scoreColor(s.score)}">${s.score.toFixed(0)}</b></span></td>
       <td>$${fmtPx(s.price)}</td>
@@ -634,6 +677,7 @@ function renderTable() {
           <dt>Position size @ risk $${sp ? sp.riskDollar.toFixed(0) : "–"}</dt><dd><b>${sp ? sp.shares : "–"} shares</b> ≈ $${posValue.toFixed(0)}</dd>
           <dt>Avg $ volume (21d)</dt><dd>${s.avgDollarVol == null ? "–" : "$" + (s.avgDollarVol / 1e6).toFixed(0) + "M/day"}</dd>
         </dl>
+        <div style="flex-basis:100%">${forwardControl(s.t, false)}</div>
         <dl>
           <dt>1w / 1m / 3m</dt><dd class="${cls(s.ret63)}">${fmtPct(s.ret5)} / ${fmtPct(s.ret21)} / ${fmtPct(s.ret63)}</dd>
           <dt>Sector (${s.sector})</dt><dd>${quad} · rank #${sec ? sec.rank : "–"} · flow ${sec && sec.flow != null ? fmtM(sec.flow) + "/d" : "–"}</dd>
@@ -653,6 +697,7 @@ function renderTable() {
     </td></tr>`;
     document.getElementById("fetch-live").addEventListener("click", () => liveFetch(q));
   }
+  wireForwardButtons(tb);
   tb.querySelectorAll(".star").forEach(el => el.addEventListener("click", e => {
     e.stopPropagation();
     const t = el.dataset.t;
@@ -675,6 +720,7 @@ function renderAll() {
   renderSectors();
   renderBreadth();
   renderPicks();
+  renderForwardCard();
   renderTable();
 }
 

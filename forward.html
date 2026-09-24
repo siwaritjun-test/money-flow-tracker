@@ -1,0 +1,456 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Forward Test — Money Flow Tracker</title>
+<style>
+  :root {
+    --bg: #0d1117; --panel: #161b22; --panel2: #1c2128; --border: #2d333b;
+    --text: #e6edf3; --muted: #8b949e; --green: #3fb950; --red: #f85149;
+    --blue: #58a6ff; --amber: #d29922; --purple: #b392f0;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; min-height: 100vh; }
+  header { padding: 18px 24px 0; display: flex; flex-wrap: wrap; align-items: center; gap: 14px; }
+  h1 { font-size: 20px; font-weight: 700; letter-spacing: -0.3px; }
+  h1 .sub { color: var(--muted); font-weight: 400; font-size: 13px; margin-left: 10px; }
+  .nav { display: inline-flex; background: var(--panel); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; flex-wrap: wrap; }
+  .nav a { color: var(--muted); padding: 8px 18px; font-size: 13px; font-weight: 600; text-decoration: none; border-right: 1px solid var(--border); white-space: nowrap; }
+  .nav a:last-child { border-right: none; }
+  .nav a.active { background: var(--blue); color: #fff; }
+  .nav a:hover:not(.active) { color: var(--text); background: var(--panel2); }
+  .badge { font-size: 11px; padding: 3px 10px; border-radius: 12px; border: 1px solid var(--border); color: var(--muted); }
+  .badge.live { color: var(--green); border-color: var(--green); }
+  #updated { font-size: 11px; color: var(--muted); margin-left: auto; }
+  main { padding: 14px 24px 24px; display: flex; flex-direction: column; gap: 14px; }
+  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 16px; min-width: 0; }
+  .card h2 { font-size: 13px; text-transform: uppercase; letter-spacing: 0.8px; color: var(--muted); margin-bottom: 4px; }
+  .card .hint { font-size: 12px; color: var(--muted); margin-bottom: 12px; line-height: 1.5; }
+  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; }
+  .tile { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; }
+  .tile .k { font-size: 10.5px; text-transform: uppercase; letter-spacing: .8px; color: var(--muted); }
+  .tile .v { font-size: 22px; font-weight: 700; margin-top: 3px; font-variant-numeric: tabular-nums; }
+  .tile .s { font-size: 11.5px; color: var(--muted); margin-top: 2px; font-variant-numeric: tabular-nums; }
+  .pos { color: var(--green); } .neg { color: var(--red); } .mut { color: var(--muted); }
+  table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  th { text-align: right; color: var(--muted); font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: .4px; padding: 7px 8px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+  th.l, td.l { text-align: left; }
+  td { padding: 8px; border-bottom: 1px solid var(--panel2); text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; vertical-align: middle; }
+  .table-wrap { overflow-x: auto; }
+  .tk { font-weight: 800; }
+  .tk a { color: var(--text); text-decoration: none; }
+  .tk a:hover { color: var(--blue); }
+  .nm { color: var(--muted); font-size: 11px; max-width: 170px; overflow: hidden; text-overflow: ellipsis; display: block; }
+  .quad { font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 8px; }
+  .q-Leading { background: rgba(63,185,80,.15); color: var(--green); }
+  .q-Improving { background: rgba(88,166,255,.15); color: var(--blue); }
+  .q-Weakening { background: rgba(210,153,34,.15); color: var(--amber); }
+  .q-Lagging { background: rgba(248,81,73,.15); color: var(--red); }
+  .stop-hit { color: var(--red); font-weight: 700; }
+  .btn { background: var(--panel2); border: 1px solid var(--border); color: var(--text); border-radius: 6px; padding: 5px 11px; font-size: 12px; cursor: pointer; white-space: nowrap; }
+  .btn:hover { border-color: var(--blue); }
+  .btn.warn { border-color: var(--red); color: var(--red); }
+  .btn.warn:hover { background: var(--red); color: #0d1117; }
+  .btn.primary { border-color: var(--purple); color: var(--purple); }
+  .btn.primary:hover { background: var(--purple); color: #0d1117; }
+  .row-actions { display: inline-flex; gap: 6px; }
+  #chart { width: 100%; height: 260px; display: block; }
+  #chart text { fill: var(--muted); font-size: 11px; font-family: inherit; }
+  .legend { display: flex; gap: 16px; font-size: 12px; color: var(--muted); margin-bottom: 6px; }
+  .legend i { display: inline-block; width: 14px; height: 3px; border-radius: 2px; vertical-align: middle; margin-right: 6px; }
+  #tooltip { position: fixed; pointer-events: none; background: var(--panel2); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; font-size: 12px; line-height: 1.5; display: none; z-index: 10; box-shadow: 0 8px 24px rgba(0,0,0,.5); font-variant-numeric: tabular-nums; }
+  .empty { padding: 26px 8px; text-align: center; color: var(--muted); font-size: 13px; line-height: 1.7; }
+  .empty a, .hint a { color: var(--blue); text-decoration: none; }
+  .backup { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; font-size: 12px; color: var(--muted); }
+  #loading { display: flex; flex-direction: column; align-items: center; gap: 12px; color: var(--muted); font-size: 13px; padding: 80px 0; }
+  .spinner { width: 28px; height: 28px; border: 3px solid var(--border); border-top-color: var(--blue); border-radius: 50%; animation: spin 0.9s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  footer { padding: 0 24px 24px; font-size: 11px; color: var(--muted); line-height: 1.6; max-width: 980px; }
+  @media (max-width: 640px) { header, main, footer { padding-left: 14px; padding-right: 14px; } .tile .v { font-size: 18px; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>Forward Test<span class="sub">your Stock Picker picks, tracked from the moment you chose them</span></h1>
+  <nav class="nav">
+    <a href="index.html">Flow Tracker</a>
+    <a href="stocks.html">Stock Picker</a>
+    <a href="themes.html">Themes</a>
+    <a href="assets.html">Asset Guide</a>
+    <a href="forward.html" class="active">Forward Test</a>
+  </nav>
+  <span id="status" class="badge">loading…</span>
+  <span id="updated"></span>
+</header>
+
+<main>
+  <div id="loading"><div class="spinner"></div><div id="loading-msg">Loading prices…</div></div>
+  <div id="content" style="display:none; flex-direction:column; gap:14px">
+
+    <section class="tiles" id="tiles"></section>
+
+    <div class="card" id="curve-card">
+      <h2>Equal-weight portfolio vs SPY</h2>
+      <div class="hint">Every pick, open or closed, equally weighted while it was held, rebalanced daily — against SPY over exactly the days something was held. This is the forward test of the whole system, not of one lucky pick.</div>
+      <div class="legend"><span><i style="background:var(--purple)"></i>Your picks</span><span><i style="background:var(--muted)"></i>SPY, same days</span></div>
+      <svg id="chart" role="img" aria-label="Forward-test portfolio return versus SPY over time"></svg>
+    </div>
+
+    <div class="card">
+      <h2>Open positions <span id="open-n" class="mut" style="text-transform:none;letter-spacing:0"></span></h2>
+      <div class="hint">Tracked from the price on screen when you pressed <b>Start forward test</b> until you press <b>Stop tracking</b>. <b>Best / Worst</b> are the highest and lowest closing return since entry. <b>Stop</b> is the 2×ATR stop suggested at entry — flagged if any later session traded through it, which is when the system itself would have exited.</div>
+      <div class="table-wrap"><table>
+        <thead><tr>
+          <th class="l">Stock</th><th class="l">Added</th><th>Entry</th><th>Last</th><th>Return</th><th>SPY</th><th>vs SPY</th>
+          <th>Best</th><th>Worst</th><th>Days</th><th>Stop</th><th>Score then → now</th><th class="l">Since entry</th><th></th>
+        </tr></thead>
+        <tbody id="open-body"></tbody>
+      </table></div>
+    </div>
+
+    <div class="card" id="signal-card">
+      <h2>What the signal was worth</h2>
+      <div class="hint">All picks (open and closed) grouped by what the Stock Picker said on the day you added them. With a handful of picks this is anecdote; it becomes evidence as the sample grows.</div>
+      <div class="table-wrap"><table>
+        <thead><tr><th class="l">Group</th><th>Picks</th><th>Avg return</th><th>Avg vs SPY</th><th>Won</th><th>Beat SPY</th></tr></thead>
+        <tbody id="signal-body"></tbody>
+      </table></div>
+    </div>
+
+    <div class="card">
+      <h2>Closed <span id="closed-n" class="mut" style="text-transform:none;letter-spacing:0"></span></h2>
+      <div class="hint">Positions you stopped tracking, frozen at the price when you stopped.</div>
+      <div class="table-wrap"><table>
+        <thead><tr>
+          <th class="l">Stock</th><th class="l">Held</th><th>Days</th><th>Entry</th><th>Exit</th><th>Return</th><th>vs SPY</th><th>Best</th><th>Worst</th><th>Score at entry</th><th></th>
+        </tr></thead>
+        <tbody id="closed-body"></tbody>
+      </table></div>
+    </div>
+
+    <div class="card">
+      <h2>Backup</h2>
+      <div class="hint">Forward tests are saved in this browser only (like the ★ watchlist). Export a file to keep a backup or to move them to another browser or phone; importing merges and never overwrites.</div>
+      <div class="backup">
+        <button class="btn" id="export">Export to file</button>
+        <label class="btn" for="import-file">Import from file</label>
+        <input type="file" id="import-file" accept="application/json,.json" hidden>
+        <span id="backup-msg"></span>
+      </div>
+    </div>
+  </div>
+</main>
+
+<footer>
+  Returns are dividend-adjusted and measured from the price shown when a position was added, so they include that session's move after the click. Prices come from the same daily data as the Stock Picker (updated by the repo's GitHub Action); tickers outside the S&amp;P 500 are fetched live from Yahoo. A paper test — no commissions, slippage or taxes. Educational tool, not investment advice.
+</footer>
+
+<div id="tooltip"></div>
+
+<script src="scripts/stock_universe.js"></script>
+<script src="scripts/stock_model.js"></script>
+<script src="scripts/market_data.js"></script>
+<script src="scripts/forward_model.js"></script>
+<script src="scripts/forward_store.js"></script>
+<script>
+const state = { etf: {}, stocks: {}, universe: STOCK_UNIVERSE, updated: null, model: null };
+
+const fmtPct = v => v == null ? "–" : (v >= 0 ? "+" : "") + (v * 100).toFixed(1) + "%";
+const fmtPx = v => v == null ? "–" : v >= 1000 ? v.toFixed(0) : v.toFixed(2);
+// Flat reads as neutral, not as a gain.
+const cls = v => v == null || Math.abs(v) < 0.0005 ? "mut" : v > 0 ? "pos" : "neg";
+const esc = s => String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;");
+const shortDate = d => new Date(d + "T00:00:00Z").toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "UTC" });
+
+async function loadData() {
+  try {
+    const r = await fetch("universe.json?t=" + Date.now(), { signal: AbortSignal.timeout(8000) });
+    if (r.ok) { const u = await r.json(); if (u?.sectors && u.count > 450) state.universe = u.sectors; }
+  } catch (e) { /* built-in fallback universe */ }
+  const [d, s] = await Promise.all([loadJson("data.json"), loadJson("stocks.json")]);
+  for (const [t, rows] of Object.entries(d.series)) if (rows.length > 25) state.etf[t] = rowsFromArr(rows);
+  for (const [t, rows] of Object.entries(s.series)) if (rows.length > 25) state.stocks[t] = rowsFromArr(rows);
+  state.updated = s.updated;
+
+  // Picks from outside the S&P 500 were fetched live on the Stock Picker; do the same here.
+  const missing = [...new Set(ForwardStore.all().map(p => p.t))].filter(t => !state.stocks[t]);
+  let done = 0;
+  await Promise.all(missing.map(async t => {
+    const rows = await fetchTickerLive(t, true);
+    if (rows) state.stocks[t] = rows;
+    document.getElementById("loading-msg").textContent = `Fetching ${++done}/${missing.length} tickers outside the S&P 500…`;
+  }));
+  try { state.model = buildModel(state.stocks, state.universe, state.etf); } catch (e) { state.model = null; }
+}
+
+function perfFor(pos) {
+  const rows = state.stocks[pos.t];
+  return rows ? positionPerf(pos, rows, state.etf.SPY) : null;
+}
+
+function scoreNow(t) {
+  const s = state.model && state.model.stocks.find(x => x.t === t);
+  return s ? s.score : null;
+}
+
+/* ------------------------------------------------------------ charts */
+function miniCurve(perf, w = 120, h = 30) {
+  const pts = perf.curve;
+  if (pts.length < 2) return '<span class="mut" style="font-size:11px">first session</span>';
+  const vals = pts.flatMap(p => [p.ret, p.bench]).filter(v => v != null).concat(0);
+  const lo = Math.min(...vals), hi = Math.max(...vals), span = hi - lo || 1;
+  const X = i => (i / (pts.length - 1)) * w;
+  const Y = v => h - 3 - ((v - lo) / span) * (h - 6);
+  const line = (key, color, width) => `<polyline fill="none" stroke="${color}" stroke-width="${width}" points="${
+    pts.map((p, i) => p[key] == null ? null : X(i).toFixed(1) + "," + Y(p[key]).toFixed(1)).filter(Boolean).join(" ")}"/>`;
+  return `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" aria-hidden="true">
+    <line x1="0" x2="${w}" y1="${Y(0).toFixed(1)}" y2="${Y(0).toFixed(1)}" stroke="var(--border)" stroke-dasharray="2 2"/>
+    ${line("bench", "var(--muted)", 1)}${line("ret", perf.ret >= 0 ? "var(--green)" : "var(--red)", 1.6)}</svg>`;
+}
+
+function drawPortfolio(curve) {
+  const svg = document.getElementById("chart");
+  const W = svg.clientWidth || 800, H = 260;
+  const PAD = { l: 52, r: 16, t: 12, b: 26 };
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  if (curve.length < 2) {
+    svg.innerHTML = `<text x="${W / 2}" y="${H / 2}" text-anchor="middle">The curve starts once your picks have been held through a second session.</text>`;
+    return;
+  }
+  const tOf = d => Date.parse(d + "T00:00:00Z");
+  const t0 = tOf(curve[0].date), t1 = tOf(curve[curve.length - 1].date);
+  const vals = curve.flatMap(p => [p.port, p.bench]).concat(0);
+  let lo = Math.min(...vals), hi = Math.max(...vals);
+  const pad = (hi - lo || 0.02) * 0.12; lo -= pad; hi += pad;
+  const X = d => PAD.l + ((tOf(d) - t0) / (t1 - t0 || 1)) * (W - PAD.l - PAD.r);
+  const Y = v => PAD.t + (1 - (v - lo) / (hi - lo)) * (H - PAD.t - PAD.b);
+  const ticks = 4, step = (hi - lo) / ticks;
+  let g = "";
+  for (let i = 0; i <= ticks; i++) {
+    const v = lo + i * step;
+    g += `<line x1="${PAD.l}" x2="${W - PAD.r}" y1="${Y(v)}" y2="${Y(v)}" stroke="var(--panel2)"/>` +
+      `<text x="${PAD.l - 6}" y="${Y(v) + 4}" text-anchor="end">${fmtPct(v)}</text>`;
+  }
+  g += `<line x1="${PAD.l}" x2="${W - PAD.r}" y1="${Y(0)}" y2="${Y(0)}" stroke="var(--border)"/>`;
+  let lastX = Infinity;
+  [...curve].reverse().forEach(p => {
+    if (lastX - X(p.date) < 70) return;
+    const anchor = X(p.date) > W - PAD.r - 30 ? "end" : "middle";
+    g += `<text x="${X(p.date)}" y="${H - 6}" text-anchor="${anchor}">${shortDate(p.date)}</text>`;
+    lastX = X(p.date);
+  });
+  const path = key => curve.map((p, i) => (i ? "L" : "M") + X(p.date).toFixed(1) + "," + Y(p[key]).toFixed(1)).join(" ");
+  g += `<path d="${path("bench")}" fill="none" stroke="var(--muted)" stroke-width="1.5"/>`;
+  g += `<path d="${path("port")}" fill="none" stroke="var(--purple)" stroke-width="2.2"/>`;
+  g += `<line id="xh" y1="${PAD.t}" y2="${H - PAD.b}" stroke="var(--border)" stroke-dasharray="3 3" opacity="0"/>`;
+  g += `<rect id="hit" x="${PAD.l}" y="${PAD.t}" width="${W - PAD.l - PAD.r}" height="${H - PAD.t - PAD.b}" fill="transparent"/>`;
+  svg.innerHTML = g;
+
+  const tip = document.getElementById("tooltip");
+  const xh = svg.querySelector("#xh");
+  svg.querySelector("#hit").addEventListener("pointermove", ev => {
+    const box = svg.getBoundingClientRect();
+    const px = (ev.clientX - box.left) / box.width * W;
+    let p = curve[0];
+    curve.forEach(q => { if (Math.abs(X(q.date) - px) < Math.abs(X(p.date) - px)) p = q; });
+    xh.setAttribute("x1", X(p.date)); xh.setAttribute("x2", X(p.date)); xh.setAttribute("opacity", 1);
+    tip.innerHTML = `<b>${shortDate(p.date)}</b><br>Picks <b class="${cls(p.port)}">${fmtPct(p.port)}</b><br>SPY <b class="${cls(p.bench)}">${fmtPct(p.bench)}</b><br><span class="mut">${p.held || 0} held that day</span>`;
+    tip.style.display = "block";
+    tip.style.left = Math.min(ev.clientX + 14, innerWidth - tip.offsetWidth - 8) + "px";
+    tip.style.top = (ev.clientY - tip.offsetHeight - 10) + "px";
+  });
+  svg.querySelector("#hit").addEventListener("pointerleave", () => { tip.style.display = "none"; xh.setAttribute("opacity", 0); });
+}
+
+/* ------------------------------------------------------------ sections */
+function tile(k, v, s) {
+  return `<div class="tile"><div class="k">${k}</div><div class="v">${v}</div><div class="s">${s || ""}</div></div>`;
+}
+
+function renderTiles(openItems, closedItems) {
+  const so = summarize(openItems.map(x => x.perf));
+  const sc = summarize(closedItems.map(x => x.perf));
+  const sa = summarize(openItems.concat(closedItems).map(x => x.perf));
+  document.getElementById("tiles").innerHTML =
+    tile("Open positions", so.n, so.n ? `won ${Math.round(so.winRate * 100)}% so far` : "none yet") +
+    tile("Open · avg return", `<span class="${cls(so.avgRet)}">${fmtPct(so.avgRet)}</span>`,
+      so.avgExcess != null ? `vs SPY <b class="${cls(so.avgExcess)}">${fmtPct(so.avgExcess)}</b>` : "") +
+    tile("Closed", sc.n, sc.n ? `avg <b class="${cls(sc.avgRet)}">${fmtPct(sc.avgRet)}</b> · won ${Math.round(sc.winRate * 100)}%` : "none yet") +
+    tile("All picks · beat SPY", sa.beatRate == null ? "–" : Math.round(sa.beatRate * 100) + "%",
+      sa.n ? `best <b class="pos">${fmtPct(sa.best)}</b> · worst <b class="${cls(sa.worst)}">${fmtPct(sa.worst)}</b>` : "");
+}
+
+function quadTag(q) {
+  return q ? `<span class="quad q-${q}">${q}</span>` : "";
+}
+
+function renderOpen(items) {
+  document.getElementById("open-n").textContent = `(${items.length})`;
+  const body = document.getElementById("open-body");
+  if (!items.length) {
+    body.innerHTML = `<tr><td colspan="14" class="empty">No open forward tests. On the <a href="stocks.html">Stock Picker</a>, open a stock's row or a Top Pick and press <b>▶ Start forward test</b>.</td></tr>`;
+    return;
+  }
+  body.innerHTML = items.sort((a, b) => b.perf.ret - a.perf.ret).map(({ p, perf }) => {
+    const now = scoreNow(p.t);
+    const then = p.signal && p.signal.score;
+    return `<tr>
+      <td class="l"><span class="tk"><a href="stocks.html?q=${encodeURIComponent(p.t)}">${esc(p.t)}</a></span> ${quadTag(p.signal && p.signal.quad)}<span class="nm">${esc(p.name)}</span></td>
+      <td class="l">${shortDate(p.entryDate)}</td>
+      <td>$${fmtPx(p.entryPrice)}</td>
+      <td>$${fmtPx(perf.lastPrice)}</td>
+      <td class="${cls(perf.ret)}"><b>${fmtPct(perf.ret)}</b></td>
+      <td class="${cls(perf.bench)}">${fmtPct(perf.bench)}</td>
+      <td class="${cls(perf.excess)}">${fmtPct(perf.excess)}</td>
+      <td class="pos">${fmtPct(perf.mfe)}</td>
+      <td class="${cls(perf.mae)}">${fmtPct(perf.mae)}</td>
+      <td>${perf.sessions}</td>
+      <td>${p.stop ? (perf.stopHit ? `<span class="stop-hit" title="A session traded below $${fmtPx(p.stop)}">hit ${shortDate(perf.stopHit)}</span>` : `$${fmtPx(p.stop)}`) : "–"}</td>
+      <td>${then == null ? "–" : then.toFixed(0)} → <b>${now == null ? "–" : now.toFixed(0)}</b></td>
+      <td class="l">${miniCurve(perf)}</td>
+      <td><span class="row-actions"><button class="btn warn" data-close="${esc(p.id)}">Stop tracking</button></span></td>
+    </tr>`;
+  }).join("");
+}
+
+function renderClosed(items) {
+  document.getElementById("closed-n").textContent = `(${items.length})`;
+  const body = document.getElementById("closed-body");
+  if (!items.length) {
+    body.innerHTML = '<tr><td colspan="11" class="empty">Nothing closed yet.</td></tr>';
+    return;
+  }
+  body.innerHTML = items.sort((a, b) => (b.p.closedAt || "").localeCompare(a.p.closedAt || "")).map(({ p, perf }) => `<tr>
+      <td class="l"><span class="tk">${esc(p.t)}</span> ${quadTag(p.signal && p.signal.quad)}<span class="nm">${esc(p.name)}</span></td>
+      <td class="l">${shortDate(p.entryDate)} → ${shortDate(p.exitDate)}</td>
+      <td>${perf.sessions}</td>
+      <td>$${fmtPx(p.entryPrice)}</td>
+      <td>$${fmtPx(p.exitPrice)}</td>
+      <td class="${cls(perf.ret)}"><b>${fmtPct(perf.ret)}</b></td>
+      <td class="${cls(perf.excess)}">${fmtPct(perf.excess)}</td>
+      <td class="pos">${fmtPct(perf.mfe)}</td>
+      <td class="${cls(perf.mae)}">${fmtPct(perf.mae)}</td>
+      <td>${p.signal && p.signal.score != null ? p.signal.score.toFixed(0) : "–"}</td>
+      <td><button class="btn" data-delete="${esc(p.id)}" title="Remove from the record entirely">Delete</button></td>
+    </tr>`).join("");
+}
+
+function renderSignal(items) {
+  const card = document.getElementById("signal-card");
+  card.style.display = items.length ? "" : "none";
+  if (!items.length) return;
+  const groups = [
+    ["Score ≥ 70 at entry", x => (x.p.signal?.score ?? -1) >= 70],
+    ["Score 50–70", x => { const s = x.p.signal?.score; return s != null && s >= 50 && s < 70; }],
+    ["Score < 50", x => { const s = x.p.signal?.score; return s != null && s < 50; }],
+    ["Sector Leading", x => x.p.signal?.quad === "Leading"],
+    ["Sector Improving", x => x.p.signal?.quad === "Improving"],
+    ["Sector Weakening / Lagging", x => ["Weakening", "Lagging"].includes(x.p.signal?.quad)],
+    ["Regime RISK-ON at entry", x => x.p.signal?.regime === "RISK-ON"],
+    ["Regime not RISK-ON", x => x.p.signal?.regime && x.p.signal.regime !== "RISK-ON"],
+    ["All picks", () => true],
+  ];
+  document.getElementById("signal-body").innerHTML = groups.map(([label, test]) => {
+    const s = summarize(items.filter(test).map(x => x.perf));
+    if (!s.n) return "";
+    return `<tr><td class="l">${label}</td><td>${s.n}</td>
+      <td class="${cls(s.avgRet)}">${fmtPct(s.avgRet)}</td><td class="${cls(s.avgExcess)}">${fmtPct(s.avgExcess)}</td>
+      <td>${Math.round(s.winRate * 100)}%</td><td>${s.beatRate == null ? "–" : Math.round(s.beatRate * 100) + "%"}</td></tr>`;
+  }).join("");
+}
+
+function render() {
+  const all = ForwardStore.all().map(p => ({ p, perf: perfFor(p) }));
+  const missing = all.filter(x => !x.perf).map(x => x.p.t);
+  const ok = all.filter(x => x.perf);
+  const open = ok.filter(x => x.p.status === "open");
+  const closed = ok.filter(x => x.p.status === "closed");
+  renderTiles(open, closed);
+  document.getElementById("curve-card").style.display = ok.length ? "" : "none";
+  if (ok.length) drawPortfolio(portfolioCurve(ok));
+  renderOpen(open);
+  renderSignal(ok);
+  renderClosed(closed);
+  if (missing.length) {
+    document.getElementById("open-body").insertAdjacentHTML("beforeend",
+      `<tr><td colspan="14" class="l mut">No price data for ${missing.map(esc).join(", ")} right now (live fetch failed) — shown again when it loads.</td></tr>`);
+  }
+}
+
+/* Stop tracking needs a second click, so a stray tap cannot end a test. */
+document.addEventListener("click", ev => {
+  const close = ev.target.closest("[data-close]");
+  if (close) {
+    if (close.dataset.armed) {
+      const p = ForwardStore.all().find(x => x.id === close.dataset.close);
+      const rows = p && state.stocks[p.t];
+      const last = rows && rows[rows.length - 1];
+      const spy = state.etf.SPY && state.etf.SPY[state.etf.SPY.length - 1];
+      if (p && last) {
+        ForwardStore.close(p.id, { exitDate: dayOf(last.ts), exitPrice: last.close, benchExit: spy ? spy.close : null });
+        render();
+      }
+      return;
+    }
+    close.dataset.armed = "1";
+    close.textContent = "Confirm stop?";
+    setTimeout(() => { if (close.isConnected) { delete close.dataset.armed; close.textContent = "Stop tracking"; } }, 4000);
+    return;
+  }
+  const del = ev.target.closest("[data-delete]");
+  if (del) {
+    if (del.dataset.armed) { ForwardStore.remove(del.dataset.delete); render(); return; }
+    del.dataset.armed = "1";
+    del.textContent = "Confirm delete?";
+    setTimeout(() => { if (del.isConnected) { delete del.dataset.armed; del.textContent = "Delete"; } }, 4000);
+  }
+});
+
+document.getElementById("export").addEventListener("click", () => {
+  const blob = new Blob([ForwardStore.exportJson()], { type: "application/json" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "forward-test-" + new Date().toISOString().slice(0, 10) + ".json";
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  document.getElementById("backup-msg").textContent = `Exported ${ForwardStore.all().length} positions.`;
+});
+
+document.getElementById("import-file").addEventListener("change", async ev => {
+  const file = ev.target.files[0];
+  if (!file) return;
+  const msg = document.getElementById("backup-msg");
+  try {
+    const n = ForwardStore.importJson(await file.text());
+    msg.textContent = n ? `Imported ${n} new positions.` : "Nothing new — every position in the file is already here.";
+    await loadData();
+    render();
+  } catch (e) {
+    msg.textContent = "Could not import: " + e.message;
+  }
+  ev.target.value = "";
+});
+
+let resizeTimer;
+addEventListener("resize", () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(render, 150); });
+
+(async function init() {
+  try {
+    await loadData();
+  } catch (e) {
+    document.getElementById("loading-msg").textContent = "Could not load price data: " + e.message;
+    return;
+  }
+  document.getElementById("loading").style.display = "none";
+  document.getElementById("content").style.display = "flex";
+  const badge = document.getElementById("status");
+  badge.textContent = "● live prices";
+  badge.className = "badge live";
+  if (state.updated) document.getElementById("updated").textContent =
+    "Prices updated " + new Date(state.updated).toLocaleString("en-GB", { timeZone: "Asia/Bangkok", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) + " GMT+7";
+  render();
+})();
+</script>
+</body>
+</html>
