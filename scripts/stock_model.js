@@ -220,10 +220,12 @@ function buildModel(stockSeries, universe, etfSeries, opts = {}) {
   const stocks = [];
   for (const [sec, list] of Object.entries(universe)) {
     const secM = sectors[sec];
-    for (const { t, n } of list) {
+    for (const { t, n, ndx, sp } of list) {
       const m = stockMetrics(stockSeries[t]);
       if (!m) continue;
       m.t = t; m.n = n; m.sector = sec;
+      m.ndx = !!ndx;          // in the Nasdaq-100
+      m.sp = sp !== false;    // in the S&P 500 (every entry unless marked otherwise)
       m.rs21 = (secM && secM.ret21 != null && m.ret21 != null) ? m.ret21 - secM.ret21 : null;
       m.rs63 = (secM && secM.ret63 != null && m.ret63 != null) ? m.ret63 - secM.ret63 : null;
       m.rsSpy21 = (spy && m.ret21 != null) ? m.ret21 - nRet(spy, 21) : null;

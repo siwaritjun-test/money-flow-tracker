@@ -2,7 +2,7 @@
 
 Live market-rotation monitor: estimates money flowing between US sectors, factors/styles, bonds & credit, and major asset classes from price × volume. Views: Sankey flow map, Relative Rotation Graph (RRG), 12-week flow history heatmap, plus an Asset Guide page detailing all 43 tickers. Daily / weekly / monthly periods, auto-refresh.
 
-**Stock Picker** (`stocks.html`) turns the rotation signal into a momentum-style stock screen: sectors are ranked by money flow + RRG quadrant, then the **full S&P 500** (auto-refreshed constituent list, `universe.json`) is scored 0–100 on a composite of relative strength vs their own sector (1m/3m), Money Flow Index, OBV money-flow trend, distance to 52-week high, volume surge and 20/50-day trend filters. A search box filters by ticker/name, and **any other US ticker** can be pulled live from Yahoo (press Enter) and scored against the same percentiles. Includes a market-breadth gauge, accumulation/distribution divergence flags, unusual-volume alerts, an ATR-based stop-loss + position-size calculator, and a watchlist (saved in the browser). See `ARCHITECTURE.md` for the scaling plan (serverless backend → full backend).
+**Stock Picker** (`stocks.html`) turns the rotation signal into a momentum-style stock screen: sectors are ranked by money flow + RRG quadrant, then the **full S&P 500 plus the Nasdaq-100** (auto-refreshed constituent lists, `universe.json`; a Nasdaq-100 filter shows just those) is scored 0–100 on a composite of relative strength vs their own sector (1m/3m), Money Flow Index, OBV money-flow trend, distance to 52-week high, volume surge and 20/50-day trend filters. A search box filters by ticker/name, and **any other US ticker** can be pulled live from Yahoo (press Enter) and scored against the same percentiles. Includes a market-breadth gauge, accumulation/distribution divergence flags, unusual-volume alerts, an ATR-based stop-loss + position-size calculator, and a watchlist (saved in the browser). See `ARCHITECTURE.md` for the scaling plan (serverless backend → full backend).
 
 **Forward Test** (`forward.html`) tracks picks you choose on the Stock Picker (▶ *Start forward test* in a stock's detail row, or ▶ *Track* on a Top Pick) from the price on screen at that moment until you press *Stop tracking*. Each position stores its signal at entry (score, sector quadrant, regime, 2×ATR stop), and the page shows its dividend-adjusted return against SPY over the same days, best/worst close since entry, whether the stop was traded through, an equal-weight portfolio curve vs SPY, and returns grouped by the entry signal. Positions live in the browser's localStorage (like the watchlist); export/import a JSON file to back up or move them.
 
@@ -21,12 +21,12 @@ A **macro regime bar** sits above the views: risk-appetite ratios (discretionary
 - `scripts/forward_store.js` — forward-test positions in localStorage, with export/import
 - `scripts/market_data.js` — shared data loading (committed JSON, live Yahoo via CORS proxies)
 - `scripts/fetch_data.js` — server-side data fetcher (runs in GitHub Actions, no dependencies)
-- `scripts/fetch_universe.js` — refreshes `universe.json` (full S&P 500 list with sectors) from Wikipedia
+- `scripts/fetch_universe.js` — refreshes `universe.json` (S&P 500 + Nasdaq-100 with sectors) from Wikipedia
 - `scripts/stock_universe.js` — built-in 88-stock fallback universe, used when universe.json is unavailable
 - `scripts/stock_model.js` — pure indicator/scoring math (MFI, OBV, ATR, composite score), shared by page and tests
 - `.github/workflows/update-data.yml` — schedule: refreshes data every 2h on weekdays
 - `data.json` — created by the Action; the site loads this directly (no CORS proxies needed)
-- `universe.json` — created by the Action; current S&P 500 constituents grouped by sector ETF
+- `universe.json` — created by the Action; current S&P 500 + Nasdaq-100 constituents grouped by sector ETF
 - `stocks.json` — created by the Action; daily bars (with high/low) for the stock universe, refreshed once per trading day
 - `archive.json` — created by the Action; permanent daily history that grows beyond Yahoo's window
 

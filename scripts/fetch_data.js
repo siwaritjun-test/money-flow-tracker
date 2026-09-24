@@ -118,7 +118,18 @@ async function updateStocks(etfSeries) {
     const prevRows = prev.series && Object.values(prev.series)[0];
     const sameUniverse = prev.tickers >= stockTickers.length * 0.9;
     if (ageH < 20 && sameUniverse && etfSeries.SPY && prevRows && lastDay(etfSeries.SPY) === lastDay(prevRows)) {
-      console.log(`stocks.json is current (${ageH.toFixed(1)}h old, same last bar) — skipping stock fetch.`);
+      // Tickers that joined the universe since (e.g. a new index member) are
+      // fetched on their own and merged in, rather than waiting a day.
+      const missing = stockTickers.filter(t => !prev.series[t]);
+      if (!missing.length) {
+        console.log(`stocks.json is current (${ageH.toFixed(1)}h old, same last bar) — skipping stock fetch.`);
+        return;
+      }
+      const add = await fetchSet(missing, true, 5);
+      Object.assign(prev.series, add.series);
+      prev.tickers = Object.keys(prev.series).length;
+      fs.writeFileSync(path.join(ROOT, "stocks.json"), JSON.stringify(prev));
+      console.log(`stocks.json is current; added ${add.ok}/${missing.length} new universe tickers.`);
       return;
     }
   } catch (e) { /* no previous stocks.json → fetch */ }

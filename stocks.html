@@ -130,6 +130,7 @@
   .ft-on { display: inline-flex; gap: 8px; align-items: center; font-size: 12px; color: var(--purple); }
   .ft-on a { color: var(--blue); text-decoration: none; }
   .ft-on a:hover { text-decoration: underline; }
+  .ix-tag { font-size: 9.5px; font-weight: 700; letter-spacing: .3px; padding: 1px 5px; border-radius: 6px; margin-left: 6px; border: 1px solid var(--border); color: var(--muted); vertical-align: 1px; }
   .ft-badge { font-size: 9.5px; font-weight: 800; letter-spacing: .4px; padding: 1px 5px; border-radius: 6px; margin-left: 6px; background: rgba(179,146,240,.18); color: var(--purple); vertical-align: 1px; }
   #ft-card .ft-row { display: flex; flex-wrap: wrap; gap: 8px; }
   #ft-card .ft-chip { display: inline-flex; gap: 6px; align-items: baseline; font-size: 12px; padding: 4px 10px; border-radius: 14px; border: 1px solid var(--border); background: var(--panel2); font-variant-numeric: tabular-nums; }
@@ -158,6 +159,7 @@
   <div class="seg" id="filter-seg">
     <button data-f="leaders" class="active" title="Stocks whose sector is Leading or Improving on the RRG, or ranked top-5 by 1m+3m excess return — the momentum playbook">Leading sectors</button>
     <button data-f="all">All sectors</button>
+    <button data-f="ndx" title="Nasdaq-100 members, including the ones outside the S&P 500">Nasdaq-100</button>
     <button data-f="watch" title="Your starred stocks (saved in this browser)">&#9733; Watchlist</button>
   </div>
   <span class="label">Risk</span>
@@ -189,7 +191,7 @@
 
     <div class="two-col">
       <div class="card">
-        <h2>Market Breadth <span style="text-transform:none;letter-spacing:0;font-weight:400">(<span id="universe-n">–</span>-stock universe)</span></h2>
+        <h2>Market Breadth <span style="text-transform:none;letter-spacing:0;font-weight:400">(<span id="universe-n">–</span>-stock universe: S&amp;P 500 + Nasdaq-100)</span></h2>
         <div class="hint">Participation check: momentum signals are far more reliable when most stocks are in uptrends, not just a few mega-caps.</div>
         <div class="stat-grid" id="breadth-grid"></div>
         <div id="breadth-verdict"></div>
@@ -238,7 +240,7 @@
 </main>
 
 <footer>
-  <strong>Method.</strong> Universe: the full S&amp;P 500, auto-refreshed from the public constituent list by the data pipeline (universe.json); any other US ticker can be pulled in live through the search box and scored against the same percentiles. The momentum playbook implemented here: (1) the regime bar says whether risk-taking is being rewarded at all; (2) sector money flow + RRG quadrant pick <em>where</em> to fish; (3) the composite score picks the strongest fish — relative strength vs its own sector, money-flow indicators (MFI, OBV trend, signed dollar volume), proximity to 52-week highs, volume confirmation and trend filters. Stops are suggested at 2&times;ATR(14) below price, with position size = (account &times; risk%) &divide; stop distance. Returns use dividend/split-adjusted closes. Data: Yahoo Finance daily bars via the repo's GitHub Action. Estimates, not actual fund flows; educational tool, not investment advice.
+  <strong>Method.</strong> Universe: the full S&amp;P 500 plus the Nasdaq-100, auto-refreshed from the public constituent lists by the data pipeline (universe.json; Nasdaq-100 names outside the S&amp;P 500 are tagged NDX and placed in a sector by their ICB industry); any other US ticker can be pulled in live through the search box and scored against the same percentiles. The momentum playbook implemented here: (1) the regime bar says whether risk-taking is being rewarded at all; (2) sector money flow + RRG quadrant pick <em>where</em> to fish; (3) the composite score picks the strongest fish — relative strength vs its own sector, money-flow indicators (MFI, OBV trend, signed dollar volume), proximity to 52-week highs, volume confirmation and trend filters. Stops are suggested at 2&times;ATR(14) below price, with position size = (account &times; risk%) &divide; stop distance. Returns use dividend/split-adjusted closes. Data: Yahoo Finance daily bars via the repo's GitHub Action. Estimates, not actual fund flows; educational tool, not investment advice.
 </footer>
 
 <div id="tooltip"></div>
@@ -547,6 +549,7 @@ function visibleStocks() {
   } else if (state.sector) list = list.filter(s => s.sector === state.sector);
   else if (state.filter === "leaders") { const lead = leaderSectors(); list = list.filter(s => lead.has(s.sector)); }
   else if (state.filter === "watch") list = list.filter(s => watchlist.has(s.t));
+  else if (state.filter === "ndx") list = list.filter(s => s.ndx);
   // sortDir -1 = the default click: descending for numbers, A→Z for text, flagged/starred first
   const k = state.sortK, d = state.sortDir;
   const sorted = [...list].sort((a, b) => {
@@ -642,14 +645,14 @@ function flagsHtml(s) {
 function renderTable() {
   const list = visibleStocks();
   document.getElementById("table-title").textContent =
-    `Momentum Screener — ${state.search ? `search “${state.search}”` : state.sector ? SECTOR_NAMES[state.sector] : state.filter === "leaders" ? "leading sectors" : state.filter === "watch" ? "watchlist" : "all sectors"} (${list.length})`;
+    `Momentum Screener — ${state.search ? `search “${state.search}”` : state.sector ? SECTOR_NAMES[state.sector] : state.filter === "leaders" ? "leading sectors" : state.filter === "watch" ? "watchlist" : state.filter === "ndx" ? "Nasdaq-100" : "all sectors"} (${list.length})`;
   const tb = document.getElementById("tbody");
   tb.innerHTML = list.map(s => {
     const sec = model.sectors[s.sector];
     const quad = sec && sec.rrg ? sec.rrg.quad : "–";
     const main = `<tr class="stock-row" data-t="${s.t}">
       <td class="l"><span class="star ${watchlist.has(s.t) ? "on" : ""}" data-t="${s.t}">&#9733;</span></td>
-      <td class="l tk-cell">${s.t}${ForwardStore.openFor(s.t) ? '<span class="ft-badge" title="In your forward test">FT</span>' : ""}<span class="mut" style="font-weight:400"> ${esc(s.n)}</span></td>
+      <td class="l tk-cell">${s.t}${s.sp ? "" : '<span class="ix-tag" title="Nasdaq-100 member outside the S&amp;P 500">NDX</span>'}${ForwardStore.openFor(s.t) ? '<span class="ft-badge" title="In your forward test">FT</span>' : ""}<span class="mut" style="font-weight:400"> ${esc(s.n)}</span></td>
       <td class="l"><span class="sec-chip q-${quad}">${s.sector}</span></td>
       <td><span class="scorebar"><span class="bb"><span class="bf" style="width:${s.score.toFixed(0)}%;background:${scoreColor(s.score)}"></span></span><b style="color:${scoreColor(s.score)}">${s.score.toFixed(0)}</b></span></td>
       <td>$${fmtPx(s.price)}</td>
@@ -692,7 +695,7 @@ function renderTable() {
   const q = state.search.toUpperCase().replace(/\./g, "-");
   if (state.search && TICKER_RE.test(state.search.toUpperCase()) && !model.stocks.some(s => s.t === q)) {
     tb.innerHTML += `<tr><td colspan="15" class="l">
-      <span class="mut">“${q}” is not in the S&amp;P 500 universe.</span>
+      <span class="mut">“${q}” is not in the S&amp;P 500 or Nasdaq-100 universe.</span>
       <button class="fetch-live-btn" id="fetch-live" style="margin-left:10px">Fetch ${q} live from Yahoo &amp; score it</button>
     </td></tr>`;
     document.getElementById("fetch-live").addEventListener("click", () => liveFetch(q));
