@@ -1,0 +1,74 @@
+{
+ "kind": "mft-forward-test",
+ "version": 1,
+ "updated": "2026-09-25T06:58:02.250Z",
+ "positions": [
+  {
+   "id": "META-mufu0fyt",
+   "status": "open",
+   "addedAt": "2026-09-24T17:54:42.005Z",
+   "t": "META",
+   "name": "Meta Platforms",
+   "sector": "XLC",
+   "entryDate": "2026-09-24",
+   "entryPrice": 769.13,
+   "benchEntry": 768.1599,
+   "stop": 713.93,
+   "signal": {
+    "score": 97,
+    "quad": "Weakening",
+    "sectorRank": 3,
+    "rs21": 0.3324859058528211,
+    "mfi": 85.6789363382634,
+    "regime": "MIXED"
+   }
+  },
+  {
+   "id": "CRWD-mufu0my0",
+   "status": "open",
+   "addedAt": "2026-09-24T17:54:51.048Z",
+   "t": "CRWD",
+   "name": "CrowdStrike",
+   "sector": "XLK",
+   "entryDate": "2026-09-24",
+   "entryPrice": 262.6856,
+   "benchEntry": 768.1599,
+   "stop": 237.87,
+   "signal": {
+    "score": 93.8,
+    "quad": "Leading",
+    "sectorRank": 2,
+    "rs21": 0.29363461801532553,
+    "mfi": 79.65556653847837,
+    "regime": "MIXED"
+   }
+  },
+  {
+   "id": "GOOGL-mufu10hi",
+   "status": "open",
+   "addedAt": "2026-09-24T17:55:08.598Z",
+   "t": "GOOGL",
+   "name": "Alphabet Inc. (Class A)",
+   "sector": "XLC",
+   "entryDate": "2026-09-24",
+   "entryPrice": 338.8064,
+   "benchEntry": 768.1599,
+   "stop": 321.05,
+   "signal": {
+    "score": 39.1,
+    "quad": "Weakening",
+    "sectorRank": 3,
+    "rs21": -0.04068373608081455,
+    "mfi": 57.08593973845049,
+    "regime": "MIXED"
+   }
+  },
+  {
+   "id": "META-muglnbyi",
+   "t": "META",
+   "addedAt": "2026-09-25T06:48:19.530Z",
+   "status": "deleted",
+   "updatedAt": "2026-09-25T06:58:02.249Z"
+  }
+ ]
+}

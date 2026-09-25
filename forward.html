@@ -62,6 +62,12 @@
   #tooltip { position: fixed; pointer-events: none; background: var(--panel2); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; font-size: 12px; line-height: 1.5; display: none; z-index: 10; box-shadow: 0 8px 24px rgba(0,0,0,.5); font-variant-numeric: tabular-nums; }
   .empty { padding: 26px 8px; text-align: center; color: var(--muted); font-size: 13px; line-height: 1.7; }
   .empty a, .hint a { color: var(--blue); text-decoration: none; }
+  .sync-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); flex: none; }
+  .sync-dot.saved { background: var(--green); } .sync-dot.error { background: var(--red); }
+  .sync-dot.readonly { background: var(--amber); } .sync-dot.syncing { background: var(--blue); }
+  #token-input { background: var(--bg); border: 1px solid var(--border); color: var(--text); border-radius: 6px; padding: 5px 9px; font-size: 12px; width: min(340px, 100%); font-family: inherit; }
+  #token-input:focus { outline: none; border-color: var(--blue); }
+  .hint code { font-size: 11px; background: var(--panel2); padding: 1px 5px; border-radius: 4px; }
   .backup { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; font-size: 12px; color: var(--muted); }
   #loading { display: flex; flex-direction: column; align-items: center; gap: 12px; color: var(--muted); font-size: 13px; padding: 80px 0; }
   .spinner { width: 28px; height: 28px; border: 3px solid var(--border); border-top-color: var(--blue); border-radius: 50%; animation: spin 0.9s linear infinite; }
@@ -129,10 +135,22 @@
       </table></div>
     </div>
 
-    <div class="card">
-      <h2>Backup</h2>
-      <div class="hint">Forward tests are saved in this browser only (like the ★ watchlist). Export a file to keep a backup or to move them to another browser or phone; importing merges and never overwrites.</div>
+    <div class="card" id="sync-card">
+      <h2>Saved to the project</h2>
+      <div class="hint">Picks are kept in <code>forward.json</code> in the GitHub repo, so every browser and phone shows the same forward test. Anyone can view them; saving from a browser needs a GitHub token pasted here once — create a <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener">fine-grained token</a> for <b>only</b> the money-flow-tracker repo with <b>Contents: Read and write</b>. It stays in this browser.</div>
       <div class="backup">
+        <span id="sync-dot" class="sync-dot"></span><span id="sync-msg">Checking the project copy…</span>
+      </div>
+      <div class="backup" id="token-row" style="margin-top:12px">
+        <input type="password" id="token-input" placeholder="github_pat_…" autocomplete="off" spellcheck="false">
+        <button class="btn primary" id="token-save">Connect GitHub</button>
+      </div>
+      <div class="backup" id="token-on" style="margin-top:12px;display:none">
+        <span>This browser saves to the project.</span>
+        <button class="btn" id="sync-now">Sync now</button>
+        <button class="btn warn" id="token-clear">Disconnect</button>
+      </div>
+      <div class="backup" style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border)">
         <button class="btn" id="export">Export to file</button>
         <label class="btn" for="import-file">Import from file</label>
         <input type="file" id="import-file" accept="application/json,.json" hidden>
@@ -361,6 +379,7 @@ function renderSignal(items) {
 }
 
 function render() {
+  renderedSig = listSig();
   const all = ForwardStore.all().map(p => ({ p, perf: perfFor(p) }));
   const missing = all.filter(x => !x.perf).map(x => x.p.t);
   const ok = all.filter(x => x.perf);
@@ -432,10 +451,45 @@ document.getElementById("import-file").addEventListener("change", async ev => {
   ev.target.value = "";
 });
 
+/* ------------------------------------------------------------ project sync */
+const listSig = () => JSON.stringify(ForwardStore.all());
+let renderedSig = null;
+function showSync(st) {
+  const tok = !!ForwardStore.token();
+  document.getElementById("sync-dot").className = "sync-dot " + st.state;
+  document.getElementById("sync-msg").textContent = st.message +
+    (st.state === "saved" || st.state === "readonly" ? " · " + st.at.toLocaleTimeString("en-GB", { timeZone: "Asia/Bangkok", hour: "2-digit", minute: "2-digit" }) : "");
+  document.getElementById("token-row").style.display = tok ? "none" : "";
+  document.getElementById("token-on").style.display = tok ? "" : "none";
+}
+ForwardStore.onChange(async st => {
+  showSync(st);
+  // Another browser's picks arrived: fetch any new tickers and redraw.
+  if (renderedSig !== null && st.state !== "syncing" && listSig() !== renderedSig) {
+    await loadData();
+    render();
+  }
+});
+document.getElementById("token-save").addEventListener("click", async () => {
+  const input = document.getElementById("token-input");
+  if (!input.value.trim()) { input.focus(); return; }
+  ForwardStore.setToken(input.value);
+  input.value = "";
+  const ok = await ForwardStore.sync();
+  if (!ok) ForwardStore.setToken("");   // a bad token must not stick
+  showSync(ForwardStore.status);
+});
+document.getElementById("token-clear").addEventListener("click", () => {
+  ForwardStore.setToken("");
+  ForwardStore.sync();
+});
+document.getElementById("sync-now").addEventListener("click", () => ForwardStore.sync());
+
 let resizeTimer;
 addEventListener("resize", () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(render, 150); });
 
 (async function init() {
+  await ForwardStore.sync();   // bring in picks made in other browsers before loading their prices
   try {
     await loadData();
   } catch (e) {

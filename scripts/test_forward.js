@@ -61,5 +61,20 @@ check(last.port > 0 && last.bench > 0, `portfolio and SPY compounded to the end:
 const s = summarize([p, closed, late]);
 check(s.n === 3 && near(s.winRate, 1) && s.best === Math.max(p.ret, closed.ret, late.ret), "summary counts, win rate and best");
 
+// Syncing picks between browsers and the repo copy.
+const { mergePositions } = require("./forward_store");
+const pick = (id, extra) => Object.assign({ id, t: id.split("-")[0], status: "open", addedAt: "2026-09-24T10:00:00Z" }, extra);
+const repo = [pick("META-a"), pick("CRWD-b", { addedAt: "2026-09-24T11:00:00Z" })];
+const phone = [pick("META-a"), pick("NVDA-c", { addedAt: "2026-09-25T01:00:00Z", updatedAt: "2026-09-25T01:00:00Z" })];
+let m = mergePositions(repo, phone);
+check(m.map(x => x.id).join() === "META-a,CRWD-b,NVDA-c", "merge keeps picks from both sides, oldest first, no duplicates");
+m = mergePositions(repo, [pick("META-a", { status: "closed", closedAt: "2026-09-26T00:00:00Z", exitPrice: 800 })]);
+check(m.find(x => x.id === "META-a").status === "closed", "a later close beats the open copy");
+m = mergePositions([pick("META-a", { status: "closed", closedAt: "2026-09-26T00:00:00Z" })], [pick("META-a")]);
+check(m.find(x => x.id === "META-a").status === "closed", "an older open copy cannot reopen a closed pick");
+m = mergePositions(repo, [{ id: "CRWD-b", t: "CRWD", status: "deleted", updatedAt: "2026-09-25T00:00:00Z" }]);
+check(m.find(x => x.id === "CRWD-b").status === "deleted", "a delete survives a merge with the old copy");
+check(mergePositions([null, { t: "X" }], repo).length === 2, "rows without an id are dropped");
+
 console.log(failures ? `\n${failures} FAILED` : "\nall passed");
 process.exit(failures ? 1 : 0);

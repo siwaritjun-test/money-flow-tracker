@@ -135,6 +135,8 @@
   #ft-card .ft-row { display: flex; flex-wrap: wrap; gap: 8px; }
   #ft-card .ft-chip { display: inline-flex; gap: 6px; align-items: baseline; font-size: 12px; padding: 4px 10px; border-radius: 14px; border: 1px solid var(--border); background: var(--panel2); font-variant-numeric: tabular-nums; }
   #ft-card .ft-chip b { font-weight: 700; }
+  #ft-sync { display: block; font-size: 11.5px; margin-top: 8px; }
+  #ft-sync a { color: var(--blue); text-decoration: none; }
   #ft-card .ft-sum { font-size: 12.5px; color: var(--muted); margin-bottom: 10px; }
   #ft-card .ft-sum a { color: var(--blue); text-decoration: none; margin-left: 6px; }
 </style>
@@ -424,6 +426,19 @@ function renderForwardCard() {
     .sort((a, b) => b.perf.ret - a.perf.ret)
     .map(({ p, perf }) => `<span class="ft-chip" title="Added ${p.entryDate} at $${fmtPx(p.entryPrice)}">${p.t} <b class="${cls(perf.ret)}">${fmtPct(perf.ret)}</b></span>`)
     .join("");
+  showForwardSync();
+}
+
+/* Picks live in the repo (forward.json); say so when this browser can't save there. */
+function showForwardSync() {
+  const st = ForwardStore.status;
+  const sum = document.getElementById("ft-sum");
+  if (!sum) return;
+  let el = document.getElementById("ft-sync");
+  if (!el) { el = document.createElement("span"); el.id = "ft-sync"; sum.appendChild(el); }
+  const needs = st.state === "error" || (st.state === "readonly" && /connect/i.test(st.message));
+  el.className = st.state === "error" ? "neg" : "mut";
+  el.innerHTML = needs ? `${esc(st.message)} — <a href="forward.html#sync-card">set up saving →</a>` : "";
 }
 
 function forwardControl(t, small) {
@@ -784,6 +799,19 @@ for (const id of ["acct", "riskpct"]) {
     document.getElementById("search").value = state.search;
   }
   renderAll();
+  // Picks made in other browsers come from the project copy; redraw if any arrived.
+  const ftSig = () => JSON.stringify(ForwardStore.all());
+  let shownSig = ftSig();
+  ForwardStore.onChange(st => {
+    if (st.state !== "syncing" && ftSig() !== shownSig) {
+      shownSig = ftSig();
+      renderForwardCard(); renderPicks(); renderTable();
+    } else if (st.state !== "syncing") {
+      shownSig = ftSig();
+      showForwardSync();
+    }
+  });
+  ForwardStore.sync();
   if (session() === "pre") {
     document.getElementById("pre-banner").style.display = "";
     const lead = leaderSectors();
