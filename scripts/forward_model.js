@@ -99,6 +99,54 @@ function portfolioCurve(items) {
   return out;
 }
 
+/** A rule test: the stocks that matched a Stock Picker rule on one day, bought in
+    equal amounts at that day's prices and held unchanged (no rebalancing, no new
+    entrants) until the test is stopped. rule.members: [{ t, entryPrice, ... }]. */
+function rulePerf(rule, stockRows, benchRows) {
+  const members = [];
+  for (const m of rule.members || []) {
+    const rows = stockRows[m.t];
+    if (!rows || !(m.entryPrice > 0)) continue;
+    const pos = {
+      entryDate: rule.entryDate, entryPrice: m.entryPrice, benchEntry: rule.benchEntry, status: rule.status,
+      exitDate: rule.exitDate, exitPrice: rule.exitPrices && rule.exitPrices[m.t], benchExit: rule.benchExit,
+    };
+    members.push({ m, perf: positionPerf(pos, rows, benchRows) });
+  }
+  if (!members.length) return null;
+
+  // Buy-and-hold equal weight = the plain mean of member returns; a member with
+  // no bar on some day (halt) keeps its last return rather than dropping out.
+  const dates = [...new Set(members.flatMap(x => x.perf.curve.map(p => p.date)))].sort();
+  const maps = members.map(x => new Map(x.perf.curve.map(p => [p.date, p])));
+  const lastRet = members.map(() => 0);
+  let bench = null;
+  const curve = dates.map(d => {
+    maps.forEach((mp, i) => { const p = mp.get(d); if (p) { lastRet[i] = p.ret; if (p.bench != null) bench = p.bench; } });
+    return { date: d, ret: lastRet.reduce((a, b) => a + b, 0) / lastRet.length, bench };
+  });
+
+  const ret = members.reduce((a, x) => a + x.perf.ret, 0) / members.length;
+  const benchRet = members.find(x => x.perf.bench != null)?.perf.bench ?? null;
+  const byRet = members.slice().sort((a, b) => b.perf.ret - a.perf.ret);
+  return {
+    ret,
+    bench: benchRet,
+    excess: benchRet == null ? null : ret - benchRet,
+    mfe: Math.max(0, ret, ...curve.map(p => p.ret)),
+    mae: Math.min(0, ret, ...curve.map(p => p.ret)),
+    n: members.length,
+    missing: (rule.members || []).length - members.length,
+    winners: members.filter(x => x.perf.ret > 0).length,
+    beatSpy: members.filter(x => x.perf.excess != null && x.perf.excess > 0).length,
+    best: byRet[0],
+    worst: byRet[byRet.length - 1],
+    members: byRet,
+    sessions: curve.filter(p => p.date > rule.entryDate).length,
+    curve,
+  };
+}
+
 function summarize(perfs) {
   const n = perfs.length;
   if (!n) return { n: 0 };
@@ -117,5 +165,5 @@ function summarize(perfs) {
 }
 
 if (typeof module !== "undefined") {
-  module.exports = { dayOf, adjFactor, positionPerf, portfolioCurve, summarize };
+  module.exports = { dayOf, adjFactor, positionPerf, portfolioCurve, rulePerf, summarize };
 }

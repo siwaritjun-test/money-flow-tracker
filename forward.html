@@ -68,6 +68,19 @@
   #token-input { background: var(--bg); border: 1px solid var(--border); color: var(--text); border-radius: 6px; padding: 5px 9px; font-size: 12px; width: min(340px, 100%); font-family: inherit; }
   #token-input:focus { outline: none; border-color: var(--blue); }
   .hint code { font-size: 11px; background: var(--panel2); padding: 1px 5px; border-radius: 4px; }
+  .rule-form { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; font-size: 12px; color: var(--muted); margin-bottom: 12px; }
+  .rule-form input[type=number] { background: var(--bg); border: 1px solid var(--border); color: var(--text); border-radius: 6px; padding: 5px 6px; font-size: 12px; width: 58px; font-family: inherit; }
+  .rule-form input:focus { outline: none; border-color: var(--blue); }
+  .rule-form .gap { width: 6px; }
+  .btn:disabled { opacity: .45; cursor: default; }
+  tr.rule-row { cursor: pointer; }
+  tr.rule-row:hover td { background: var(--panel2); }
+  tr.rule-row .caret { display: inline-block; width: 12px; color: var(--muted); }
+  tr.rule-detail td { text-align: left; white-space: normal; background: var(--bg); }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; padding: 4px 0; }
+  .chip { display: inline-flex; gap: 5px; align-items: baseline; font-size: 11.5px; padding: 3px 8px; border-radius: 12px; border: 1px solid var(--border); background: var(--panel2); font-variant-numeric: tabular-nums; }
+  .chip a { color: var(--text); text-decoration: none; font-weight: 600; }
+  .chip .sc { color: var(--muted); font-size: 10.5px; }
   .backup { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; font-size: 12px; color: var(--muted); }
   #loading { display: flex; flex-direction: column; align-items: center; gap: 12px; color: var(--muted); font-size: 13px; padding: 80px 0; }
   .spinner { width: 28px; height: 28px; border: 3px solid var(--border); border-top-color: var(--blue); border-radius: 50%; animation: spin 0.9s linear infinite; }
@@ -78,7 +91,7 @@
 </head>
 <body>
 <header>
-  <h1>Forward Test<span class="sub">your Stock Picker picks, tracked from the moment you chose them</span></h1>
+  <h1>Forward Test<span class="sub">your Stock Picker picks and score rules, tracked from the moment you chose them</span></h1>
   <nav class="nav">
     <a href="index.html">Flow Tracker</a>
     <a href="stocks.html">Stock Picker</a>
@@ -93,6 +106,29 @@
 <main>
   <div id="loading"><div class="spinner"></div><div id="loading-msg">Loading prices…</div></div>
   <div id="content" style="display:none; flex-direction:column; gap:14px">
+
+    <div class="card" id="rules-card">
+      <h2>Rule tests <span id="rules-n" class="mut" style="text-transform:none;letter-spacing:0"></span></h2>
+      <div class="hint">Test a rule instead of single picks: every stock whose Stock Picker score is in a range today, bought in equal amounts at the latest close and held as one basket until you stop it. No stock is added or dropped later, so the result shows what the score was worth on the day you started. Click a row to see its stocks.</div>
+      <div class="rule-form">
+        <span>Score from</span><input type="number" id="rule-min" min="0" max="100" step="1" value="60">
+        <span>up to</span><input type="number" id="rule-max" min="1" max="100" step="1" value="70">
+        <span class="gap"></span>
+        <button class="btn" data-preset="60,70">60–70</button>
+        <button class="btn" data-preset="80,90">80–90</button>
+        <button class="btn" data-preset="90,100">90–100</button>
+        <span class="gap"></span>
+        <button class="btn primary" id="rule-start">&#9654; Start rule test</button>
+        <span id="rule-preview"></span>
+      </div>
+      <div class="table-wrap"><table>
+        <thead><tr>
+          <th class="l">Rule</th><th class="l">Started</th><th>Stocks</th><th>Return</th><th>SPY</th><th>vs SPY</th>
+          <th>Beat SPY</th><th>Best</th><th>Worst</th><th>Days</th><th class="l">Since start</th><th></th>
+        </tr></thead>
+        <tbody id="rules-body"></tbody>
+      </table></div>
+    </div>
 
     <section class="tiles" id="tiles"></section>
 
@@ -192,7 +228,8 @@ async function loadData() {
   state.updated = s.updated;
 
   // Picks from outside the S&P 500 were fetched live on the Stock Picker; do the same here.
-  const missing = [...new Set(ForwardStore.all().map(p => p.t))].filter(t => !state.stocks[t]);
+  const wanted = ForwardStore.all().map(p => p.t).concat(ForwardStore.rules().flatMap(r => r.members.map(m => m.t)));
+  const missing = [...new Set(wanted)].filter(t => !state.stocks[t]);
   let done = 0;
   await Promise.all(missing.map(async t => {
     const rows = await fetchTickerLive(t, true);
@@ -378,8 +415,127 @@ function renderSignal(items) {
   }).join("");
 }
 
+/* ------------------------------------------------------------ rule tests */
+const ruleLabel = r => `Score ${r.rule.min}–${r.rule.max}`;
+const inRule = (score, min, max) => score >= min && (score < max || (max >= 100 && score <= 100));
+const expandedRules = new Set();
+
+function lastSession() {
+  const spy = state.etf.SPY;
+  return spy && spy.length ? spy[spy.length - 1] : null;
+}
+
+function ruleMatches(min, max) {
+  const last = lastSession();
+  if (!state.model || !last) return [];
+  const day = dayOf(last.ts);
+  // Only stocks priced on the latest session, so every member starts on the same day.
+  return state.model.stocks.filter(s => inRule(s.score, min, max) && dayOf(s.lastTs) === day);
+}
+
+function readRuleForm() {
+  const val = id => Math.max(0, Math.min(100, Math.round(+document.getElementById(id).value || 0)));
+  return { min: val("rule-min"), max: val("rule-max") };
+}
+
+function updateRulePreview() {
+  const { min, max } = readRuleForm();
+  const el = document.getElementById("rule-preview");
+  const btn = document.getElementById("rule-start");
+  const last = lastSession();
+  if (!(max > min)) { el.innerHTML = '<span class="neg">The upper score must be above the lower one.</span>'; btn.disabled = true; return; }
+  const n = ruleMatches(min, max).length;
+  const day = last ? dayOf(last.ts) : null;
+  const dup = ForwardStore.rules().some(r => r.status === "open" && r.rule.min === min && r.rule.max === max && r.entryDate === day);
+  btn.disabled = !n || dup;
+  el.innerHTML = dup ? `<span class="mut">Already testing score ${min}–${max} from ${shortDate(day)}.</span>`
+    : `<b>${n}</b> stocks score ${min}–${max} now · entry at the ${day ? shortDate(day) : "latest"} close`;
+}
+
+function startRule() {
+  const { min, max } = readRuleForm();
+  const matches = ruleMatches(min, max);
+  const last = lastSession();
+  if (!matches.length || !last || !(max > min)) return;
+  ForwardStore.addRule({
+    rule: { min, max },
+    entryDate: dayOf(last.ts),
+    benchEntry: last.close,
+    members: matches.map(s => ({ t: s.t, name: s.n, sector: s.sector, entryPrice: s.price, score: +s.score.toFixed(1) })),
+  });
+  render();
+}
+
+function stopRule(r) {
+  const last = lastSession();
+  if (!last) return;
+  const exitPrices = {};
+  for (const m of r.members) {
+    const rows = state.stocks[m.t];
+    const bar = rows && rows[rows.length - 1];
+    if (bar && dayOf(bar.ts) >= r.entryDate) exitPrices[m.t] = bar.close;
+  }
+  ForwardStore.close(r.id, { exitDate: dayOf(last.ts), exitPrices, benchExit: last.close });
+  render();
+}
+
+function renderRules() {
+  const rules = ForwardStore.rules()
+    .map(r => ({ r, perf: rulePerf(r, state.stocks, state.etf.SPY) }))
+    .sort((a, b) => (a.r.status === "open" ? 0 : 1) - (b.r.status === "open" ? 0 : 1) || b.r.addedAt.localeCompare(a.r.addedAt));
+  const open = rules.filter(x => x.r.status === "open").length;
+  document.getElementById("rules-n").textContent = rules.length ? `(${open} running${rules.length > open ? `, ${rules.length - open} stopped` : ""})` : "";
+  const body = document.getElementById("rules-body");
+  updateRulePreview();
+  if (!rules.length) {
+    body.innerHTML = '<tr><td colspan="12" class="empty">No rule tests yet. Pick a score range above and press <b>▶ Start rule test</b>.</td></tr>';
+    return;
+  }
+  body.innerHTML = rules.map(({ r, perf }) => {
+    const exp = expandedRules.has(r.id);
+    const action = r.status === "open"
+      ? `<button class="btn warn" data-rclose="${esc(r.id)}">Stop tracking</button>`
+      : `<span class="mut" style="margin-right:8px">stopped ${shortDate(r.exitDate)}</span><button class="btn" data-delete="${esc(r.id)}" title="Remove from the record entirely">Delete</button>`;
+    if (!perf) {
+      return `<tr><td class="l"><b>${ruleLabel(r)}</b></td><td class="l">${shortDate(r.entryDate)}</td><td>${r.members.length}</td>
+        <td colspan="8" class="l mut">No price data for these stocks right now.</td><td><span class="row-actions">${action}</span></td></tr>`;
+    }
+    const member = x => `${esc(x.m.t)} <span class="${cls(x.perf.ret)}">${fmtPct(x.perf.ret)}</span>`;
+    let html = `<tr class="rule-row" data-rule="${esc(r.id)}">
+      <td class="l"><span class="caret">${exp ? "▾" : "▸"}</span><b>${ruleLabel(r)}</b></td>
+      <td class="l">${shortDate(r.entryDate)}</td>
+      <td>${perf.n}${perf.missing ? `<span class="mut" title="No price data right now"> +${perf.missing}</span>` : ""}</td>
+      <td class="${cls(perf.ret)}"><b>${fmtPct(perf.ret)}</b></td>
+      <td class="${cls(perf.bench)}">${fmtPct(perf.bench)}</td>
+      <td class="${cls(perf.excess)}"><b>${fmtPct(perf.excess)}</b></td>
+      <td title="${perf.beatSpy} of ${perf.n} stocks ahead of SPY · ${perf.winners} up">${Math.round(100 * perf.beatSpy / perf.n)}%</td>
+      <td>${member(perf.best)}</td>
+      <td>${member(perf.worst)}</td>
+      <td>${perf.sessions}</td>
+      <td class="l">${miniCurve(perf)}</td>
+      <td><span class="row-actions">${action}</span></td>
+    </tr>`;
+    if (exp) {
+      html += `<tr class="rule-detail"><td colspan="12"><div class="chips">${perf.members.map(x =>
+        `<span class="chip" title="${esc(x.m.name)} · bought at $${fmtPx(x.m.entryPrice)} · score then ${x.m.score.toFixed(0)}"><a href="stocks.html?q=${encodeURIComponent(x.m.t)}">${esc(x.m.t)}</a><b class="${cls(x.perf.ret)}">${fmtPct(x.perf.ret)}</b><span class="sc">${x.m.score.toFixed(0)}</span></span>`).join("")}</div>
+        <div class="mut" style="font-size:11px;margin-top:4px">Return since start · small number = score on the start day. ${perf.winners} of ${perf.n} up, ${perf.beatSpy} ahead of SPY.</div></td></tr>`;
+    }
+    return html;
+  }).join("");
+}
+
+["rule-min", "rule-max"].forEach(id => document.getElementById(id).addEventListener("input", updateRulePreview));
+document.querySelectorAll("[data-preset]").forEach(b => b.addEventListener("click", () => {
+  const [min, max] = b.dataset.preset.split(",");
+  document.getElementById("rule-min").value = min;
+  document.getElementById("rule-max").value = max;
+  updateRulePreview();
+}));
+document.getElementById("rule-start").addEventListener("click", startRule);
+
 function render() {
   renderedSig = listSig();
+  renderRules();
   const all = ForwardStore.all().map(p => ({ p, perf: perfFor(p) }));
   const missing = all.filter(x => !x.perf).map(x => x.p.t);
   const ok = all.filter(x => x.perf);
@@ -399,6 +555,25 @@ function render() {
 
 /* Stop tracking needs a second click, so a stray tap cannot end a test. */
 document.addEventListener("click", ev => {
+  const rclose = ev.target.closest("[data-rclose]");
+  if (rclose) {
+    if (rclose.dataset.armed) {
+      const r = ForwardStore.rules().find(x => x.id === rclose.dataset.rclose);
+      if (r) stopRule(r);
+      return;
+    }
+    rclose.dataset.armed = "1";
+    rclose.textContent = "Confirm stop?";
+    setTimeout(() => { if (rclose.isConnected) { delete rclose.dataset.armed; rclose.textContent = "Stop tracking"; } }, 4000);
+    return;
+  }
+  const row = ev.target.closest("tr.rule-row");
+  if (row && !ev.target.closest("button, a")) {
+    const id = row.dataset.rule;
+    if (expandedRules.has(id)) expandedRules.delete(id); else expandedRules.add(id);
+    renderRules();
+    return;
+  }
   const close = ev.target.closest("[data-close]");
   if (close) {
     if (close.dataset.armed) {
@@ -433,7 +608,7 @@ document.getElementById("export").addEventListener("click", () => {
   a.download = "forward-test-" + new Date().toISOString().slice(0, 10) + ".json";
   a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
-  document.getElementById("backup-msg").textContent = `Exported ${ForwardStore.all().length} positions.`;
+  document.getElementById("backup-msg").textContent = `Exported ${ForwardStore.all().length} picks and ${ForwardStore.rules().length} rule tests.`;
 });
 
 document.getElementById("import-file").addEventListener("change", async ev => {
@@ -452,7 +627,7 @@ document.getElementById("import-file").addEventListener("change", async ev => {
 });
 
 /* ------------------------------------------------------------ project sync */
-const listSig = () => JSON.stringify(ForwardStore.all());
+const listSig = () => JSON.stringify(ForwardStore.raw());
 let renderedSig = null;
 function showSync(st) {
   const tok = !!ForwardStore.token();

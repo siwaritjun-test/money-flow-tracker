@@ -1,7 +1,7 @@
 {
  "kind": "mft-forward-test",
  "version": 1,
- "updated": "2026-09-25T06:58:02.250Z",
+ "updated": "2026-09-25T09:27:02.064Z",
  "positions": [
   {
    "id": "META-mufu0fyt",
@@ -69,6 +69,329 @@
    "addedAt": "2026-09-25T06:48:19.530Z",
    "status": "deleted",
    "updatedAt": "2026-09-25T06:58:02.249Z"
+  },
+  {
+   "id": "rule-mugrbflc",
+   "kind": "rule",
+   "status": "open",
+   "addedAt": "2026-09-25T09:27:02.064Z",
+   "updatedAt": "2026-09-25T09:27:02.064Z",
+   "rule": {
+    "min": 60,
+    "max": 70
+   },
+   "entryDate": "2026-09-24",
+   "benchEntry": 767.18,
+   "members": [
+    {
+     "t": "JNJ",
+     "name": "Johnson & Johnson",
+     "sector": "XLV",
+     "entryPrice": 270.68,
+     "score": 70
+    },
+    {
+     "t": "NVDA",
+     "name": "Nvidia",
+     "sector": "XLK",
+     "entryPrice": 224.58,
+     "score": 69.9
+    },
+    {
+     "t": "VLTO",
+     "name": "Veralto",
+     "sector": "XLI",
+     "entryPrice": 96.2,
+     "score": 69.6
+    },
+    {
+     "t": "CRM",
+     "name": "Salesforce",
+     "sector": "XLK",
+     "entryPrice": 238.22,
+     "score": 68.8
+    },
+    {
+     "t": "UHS",
+     "name": "Universal Health Services",
+     "sector": "XLV",
+     "entryPrice": 176.99,
+     "score": 68.1
+    },
+    {
+     "t": "KR",
+     "name": "Kroger",
+     "sector": "XLP",
+     "entryPrice": 58.92,
+     "score": 67.7
+    },
+    {
+     "t": "DXCM",
+     "name": "Dexcom",
+     "sector": "XLV",
+     "entryPrice": 87.47,
+     "score": 67.6
+    },
+    {
+     "t": "DAL",
+     "name": "Delta Air Lines",
+     "sector": "XLI",
+     "entryPrice": 82.76,
+     "score": 67.1
+    },
+    {
+     "t": "HPQ",
+     "name": "HP Inc.",
+     "sector": "XLK",
+     "entryPrice": 31.14,
+     "score": 67.1
+    },
+    {
+     "t": "TSLA",
+     "name": "Tesla, Inc.",
+     "sector": "XLY",
+     "entryPrice": 377.94,
+     "score": 66.8
+    },
+    {
+     "t": "WSM",
+     "name": "Williams-Sonoma, Inc.",
+     "sector": "XLY",
+     "entryPrice": 228.66,
+     "score": 66.7
+    },
+    {
+     "t": "QCOM",
+     "name": "Qualcomm",
+     "sector": "XLK",
+     "entryPrice": 194.26,
+     "score": 66.6
+    },
+    {
+     "t": "REGN",
+     "name": "Regeneron Pharmaceuticals",
+     "sector": "XLV",
+     "entryPrice": 796.02,
+     "score": 66.6
+    },
+    {
+     "t": "CVX",
+     "name": "Chevron Corporation",
+     "sector": "XLE",
+     "entryPrice": 205.65,
+     "score": 66.5
+    },
+    {
+     "t": "SMCI",
+     "name": "Supermicro",
+     "sector": "XLK",
+     "entryPrice": 41.51,
+     "score": 66.3
+    },
+    {
+     "t": "GDDY",
+     "name": "GoDaddy",
+     "sector": "XLK",
+     "entryPrice": 100.81,
+     "score": 66.1
+    },
+    {
+     "t": "ZBRA",
+     "name": "Zebra Technologies",
+     "sector": "XLK",
+     "entryPrice": 365.1,
+     "score": 66
+    },
+    {
+     "t": "MO",
+     "name": "Altria",
+     "sector": "XLP",
+     "entryPrice": 68.88,
+     "score": 66
+    },
+    {
+     "t": "APA",
+     "name": "APA Corporation",
+     "sector": "XLE",
+     "entryPrice": 43.68,
+     "score": 66
+    },
+    {
+     "t": "IEX",
+     "name": "IDEX Corporation",
+     "sector": "XLI",
+     "entryPrice": 228.5,
+     "score": 65.9
+    },
+    {
+     "t": "ARM",
+     "name": "Arm Holdings",
+     "sector": "XLK",
+     "entryPrice": 306.34,
+     "score": 65.8
+    },
+    {
+     "t": "VRSN",
+     "name": "Verisign",
+     "sector": "XLK",
+     "entryPrice": 291.88,
+     "score": 65.7
+    },
+    {
+     "t": "PKG",
+     "name": "Packaging Corporation of America",
+     "sector": "XLB",
+     "entryPrice": 238.11,
+     "score": 65.6
+    },
+    {
+     "t": "SJM",
+     "name": "J.M. Smucker Company (The)",
+     "sector": "XLP",
+     "entryPrice": 121.66,
+     "score": 65.4
+    },
+    {
+     "t": "ULTA",
+     "name": "Ulta Beauty",
+     "sector": "XLY",
+     "entryPrice": 548.78,
+     "score": 65.3
+    },
+    {
+     "t": "PWR",
+     "name": "Quanta Services",
+     "sector": "XLI",
+     "entryPrice": 643.5,
+     "score": 65.3
+    },
+    {
+     "t": "XOM",
+     "name": "ExxonMobil",
+     "sector": "XLE",
+     "entryPrice": 162.14,
+     "score": 65.2
+    },
+    {
+     "t": "LITE",
+     "name": "Lumentum",
+     "sector": "XLK",
+     "entryPrice": 929.04,
+     "score": 64.5
+    },
+    {
+     "t": "BE",
+     "name": "Bloom Energy",
+     "sector": "XLI",
+     "entryPrice": 266.65,
+     "score": 64.5
+    },
+    {
+     "t": "ITW",
+     "name": "Illinois Tool Works",
+     "sector": "XLI",
+     "entryPrice": 272,
+     "score": 64.4
+    },
+    {
+     "t": "PH",
+     "name": "Parker Hannifin",
+     "sector": "XLI",
+     "entryPrice": 974.98,
+     "score": 64.1
+    },
+    {
+     "t": "RKLB",
+     "name": "Rocket Lab",
+     "sector": "XLI",
+     "entryPrice": 73.61,
+     "score": 63.9
+    },
+    {
+     "t": "SHOP",
+     "name": "Shopify",
+     "sector": "XLK",
+     "entryPrice": 145.16,
+     "score": 63.8
+    },
+    {
+     "t": "APH",
+     "name": "Amphenol",
+     "sector": "XLK",
+     "entryPrice": 83.08,
+     "score": 63.8
+    },
+    {
+     "t": "BRK-B",
+     "name": "Berkshire Hathaway",
+     "sector": "XLF",
+     "entryPrice": 505.18,
+     "score": 63.2
+    },
+    {
+     "t": "NDAQ",
+     "name": "Nasdaq, Inc.",
+     "sector": "XLF",
+     "entryPrice": 94.55,
+     "score": 62.3
+    },
+    {
+     "t": "V",
+     "name": "Visa Inc.",
+     "sector": "XLF",
+     "entryPrice": 367.98,
+     "score": 61.5
+    },
+    {
+     "t": "ALAB",
+     "name": "Astera Labs",
+     "sector": "XLK",
+     "entryPrice": 360.51,
+     "score": 61.5
+    },
+    {
+     "t": "ADM",
+     "name": "Archer Daniels Midland",
+     "sector": "XLP",
+     "entryPrice": 81.88,
+     "score": 61.4
+    },
+    {
+     "t": "MU",
+     "name": "Micron Technology",
+     "sector": "XLK",
+     "entryPrice": 1080.53,
+     "score": 61.1
+    },
+    {
+     "t": "DGX",
+     "name": "Quest Diagnostics",
+     "sector": "XLV",
+     "entryPrice": 236.59,
+     "score": 60.9
+    },
+    {
+     "t": "MAR",
+     "name": "Marriott International",
+     "sector": "XLY",
+     "entryPrice": 351.51,
+     "score": 60.4
+    },
+    {
+     "t": "SOLV",
+     "name": "Solventum",
+     "sector": "XLV",
+     "entryPrice": 88.59,
+     "score": 60.3
+    },
+    {
+     "t": "AMGN",
+     "name": "Amgen",
+     "sector": "XLV",
+     "entryPrice": 406.04,
+     "score": 60.3
+    }
+   ]
   }
  ]
 }

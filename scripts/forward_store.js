@@ -7,7 +7,12 @@
      { id, t, name, sector, addedAt, updatedAt, entryDate, entryPrice, benchEntry,
        stop, signal: { score, quad, sectorRank, rs21, mfi, regime },
        status: "open" | "closed" | "deleted", closedAt?, exitDate?, exitPrice?, benchExit? }
-   A deleted position stays as a small tombstone so a sync cannot bring it back. */
+   A rule test (kind: "rule") is one record holding every stock that matched a
+   score rule on its start day:
+     { id, kind: "rule", rule: { min, max }, addedAt, updatedAt, entryDate, benchEntry,
+       regime, members: [{ t, name, sector, entryPrice, score }], status,
+       closedAt?, exitDate?, exitPrices?: { [t]: price }, benchExit? }
+   A deleted record stays as a small tombstone so a sync cannot bring it back. */
 
 const FT_KEY = "mft-forward-v1";
 const FT_TOKEN_KEY = "mft-gh-token";
@@ -49,8 +54,23 @@ const ForwardStore = {
     }
   },
 
+  /** Single picks (what the Stock Picker's ▶ Track buttons create). */
   all() {
-    return this.raw().filter(p => p.status !== "deleted");
+    return this.raw().filter(p => p.status !== "deleted" && p.kind !== "rule");
+  },
+
+  /** Rule tests: score-range baskets started on forward.html. */
+  rules() {
+    return this.raw().filter(p => p.status !== "deleted" && p.kind === "rule");
+  },
+
+  addRule(test) {
+    const list = this.raw();
+    const id = "rule-" + Date.now().toString(36);
+    const now = new Date().toISOString();
+    list.push(Object.assign({ id, kind: "rule", status: "open", addedAt: now, updatedAt: now }, test));
+    this.save(list);
+    return id;
   },
 
   save(list) {
@@ -89,12 +109,12 @@ const ForwardStore = {
     const i = list.findIndex(p => p.id === id);
     if (i < 0) return;
     const p = list[i];
-    list[i] = { id: p.id, t: p.t, addedAt: p.addedAt, status: "deleted", updatedAt: new Date().toISOString() };
+    list[i] = { id: p.id, t: p.t, kind: p.kind, addedAt: p.addedAt, status: "deleted", updatedAt: new Date().toISOString() };
     this.save(list);
   },
 
   exportJson() {
-    return JSON.stringify({ kind: "mft-forward-test", version: 1, exportedAt: new Date().toISOString(), positions: this.all() }, null, 1);
+    return JSON.stringify({ kind: "mft-forward-test", version: 1, exportedAt: new Date().toISOString(), positions: this.raw().filter(p => p.status !== "deleted") }, null, 1);
   },
 
   /** Merge an export into this browser; positions already present (same id) are kept as-is. */
@@ -102,7 +122,8 @@ const ForwardStore = {
     const data = JSON.parse(text);
     const incoming = Array.isArray(data) ? data : data && data.positions;
     if (!Array.isArray(incoming)) throw new Error("not a forward-test export");
-    const valid = incoming.filter(p => p && p.id && p.t && p.entryDate && p.entryPrice > 0);
+    const valid = incoming.filter(p => p && p.id && p.entryDate &&
+      (p.kind === "rule" ? Array.isArray(p.members) : p.t && p.entryPrice > 0));
     const list = this.raw();
     const have = new Set(list.map(p => p.id));
     const added = valid.filter(p => !have.has(p.id));

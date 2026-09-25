@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /* Checks the forward-test math on synthetic bars with known answers.
    Run: node scripts/test_forward.js — exits non-zero on any failed assertion. */
-const { positionPerf, portfolioCurve, summarize, adjFactor } = require("./forward_model");
+const { positionPerf, portfolioCurve, rulePerf, summarize, adjFactor } = require("./forward_model");
 
 let failures = 0;
 const check = (cond, msg) => { if (cond) console.log("PASS  " + msg); else { failures++; console.error("FAIL  " + msg); } };
@@ -60,6 +60,21 @@ check(last.port > 0 && last.bench > 0, `portfolio and SPY compounded to the end:
 
 const s = summarize([p, closed, late]);
 check(s.n === 3 && near(s.winRate, 1) && s.best === Math.max(p.ret, closed.ret, late.ret), "summary counts, win rate and best");
+
+// Rule test: X (100 -> 105) and Y (50 -> 45, no bar on 09-03) bought equally on 09-01.
+const yRows = [bar("2026-09-01", 50), bar("2026-09-02", 52), bar("2026-09-04", 48), bar("2026-09-08", 45)];
+const rule = { entryDate: "2026-09-01", benchEntry: 500, status: "open",
+  members: [{ t: "X", entryPrice: 100 }, { t: "Y", entryPrice: 50 }, { t: "GONE", entryPrice: 10 }] };
+const rp = rulePerf(rule, { X: stock, Y: yRows }, spy);
+check(near(rp.ret, (0.05 - 0.10) / 2), `basket return is the mean of member returns: ${rp.ret}`);
+check(near(rp.excess, rp.ret - 0.02), "basket vs SPY over the same days");
+check(rp.n === 2 && rp.missing === 1, "members without prices are counted as missing, not as zero");
+check(rp.winners === 1 && rp.beatSpy === 1 && rp.best.m.t === "X" && rp.worst.m.t === "Y", "winners, beat-SPY count, best and worst member");
+const d3 = rp.curve.find(q => q.date === "2026-09-03");
+check(near(d3.ret, (0.10 + 0.04) / 2), `a member with no bar that day keeps its last return: ${d3.ret}`);
+const rc = rulePerf({ ...rule, status: "closed", exitDate: "2026-09-02", exitPrices: { X: 104, Y: 52 }, benchExit: 505 }, { X: stock, Y: yRows }, spy);
+check(near(rc.ret, (0.04 + 0.04) / 2) && near(rc.bench, 0.01), `a stopped rule test is frozen at its exit prices: ${rc.ret}`);
+check(rulePerf({ ...rule, members: [{ t: "GONE", entryPrice: 1 }] }, {}, spy) === null, "no priced members -> null");
 
 // Syncing picks between browsers and the repo copy.
 const { mergePositions } = require("./forward_store");
