@@ -1,0 +1,593 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bear Resilience — Money Flow Tracker</title>
+<style>
+  :root {
+    --bg: #0d1117; --panel: #161b22; --panel2: #1c2128; --border: #2d333b;
+    --text: #e6edf3; --muted: #8b949e; --green: #3fb950; --red: #f85149;
+    --blue: #58a6ff; --amber: #d29922; --purple: #b392f0;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; min-height: 100vh; }
+  header { padding: 18px 24px 0; display: flex; flex-wrap: wrap; align-items: center; gap: 14px; }
+  h1 { font-size: 20px; font-weight: 700; letter-spacing: -0.3px; }
+  h1 .sub { color: var(--muted); font-weight: 400; font-size: 13px; margin-left: 10px; }
+  .nav { display: inline-flex; background: var(--panel); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; flex-wrap: wrap; }
+  .nav a { color: var(--muted); padding: 8px 18px; font-size: 13px; font-weight: 600; text-decoration: none; border-right: 1px solid var(--border); white-space: nowrap; }
+  .nav a:last-child { border-right: none; }
+  .nav a.active { background: var(--blue); color: #fff; }
+  .nav a:hover:not(.active) { color: var(--text); background: var(--panel2); }
+  .badge { font-size: 11px; padding: 3px 10px; border-radius: 12px; border: 1px solid var(--border); color: var(--muted); }
+  .badge.live { color: var(--green); border-color: var(--green); }
+  .badge.sample { color: var(--amber); border-color: var(--amber); }
+  #updated { font-size: 11px; color: var(--muted); margin-left: auto; }
+  .controls { padding: 14px 24px 4px; display: flex; flex-wrap: wrap; gap: 14px; align-items: center; }
+  .label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.8px; color: var(--muted); margin-right: -6px; }
+  .seg { display: inline-flex; flex-wrap: wrap; background: var(--panel); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  .seg button { background: none; border: none; color: var(--muted); padding: 7px 14px; font-size: 13px; cursor: pointer; border-right: 1px solid var(--border); }
+  .seg button:last-child { border-right: none; }
+  .seg button.active { background: var(--blue); color: #fff; font-weight: 600; }
+  .seg button:hover:not(.active) { color: var(--text); }
+  #search { width: 240px; max-width: 100%; background: var(--panel); border: 1px solid var(--border); border-radius: 8px; color: var(--text); padding: 8px 12px; font-size: 13px; }
+  #search:focus { outline: none; border-color: var(--blue); }
+  #search::placeholder { color: var(--muted); }
+  main { padding: 14px 24px 24px; display: flex; flex-direction: column; gap: 14px; }
+  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 16px; min-width: 0; }
+  .card h2 { font-size: 13px; text-transform: uppercase; letter-spacing: 0.8px; color: var(--muted); margin-bottom: 4px; }
+  .card .hint { font-size: 12px; color: var(--muted); margin-bottom: 12px; line-height: 1.5; }
+  .pos { color: var(--green); } .neg { color: var(--red); } .mut { color: var(--muted); }
+  /* market backdrop */
+  #backdrop { font-size: 13px; line-height: 1.6; }
+  #backdrop .verdict { display: inline-block; font-weight: 800; font-size: 12px; letter-spacing: .5px; padding: 3px 12px; border-radius: 14px; border: 1px solid; margin-right: 10px; }
+  /* sector strip */
+  #sector-strip { display: grid; grid-template-columns: repeat(auto-fill, minmax(168px, 1fr)); gap: 10px; }
+  .sec-card { background: var(--panel2); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; cursor: pointer; transition: border-color .15s; }
+  .sec-card:hover { border-color: var(--blue); }
+  .sec-card.selected { border-color: var(--blue); box-shadow: 0 0 0 1px var(--blue); }
+  .sec-card .nm { font-size: 12.5px; font-weight: 700; }
+  .sec-card .tk { color: var(--muted); font-size: 11px; font-weight: 400; }
+  .sec-card .st { font-size: 10px; font-weight: 700; letter-spacing: .5px; padding: 1px 7px; border-radius: 8px; display: inline-block; margin: 5px 0 4px; text-transform: uppercase; }
+  .st-bear { background: rgba(248,81,73,.15); color: var(--red); }
+  .st-pullback { background: rgba(210,153,34,.15); color: var(--amber); }
+  .st-recovered { background: rgba(88,166,255,.15); color: var(--blue); }
+  .st-calm { background: rgba(139,148,158,.15); color: var(--muted); }
+  .sec-card .mets { font-size: 11px; color: var(--muted); line-height: 1.55; font-variant-numeric: tabular-nums; }
+  /* scatter + leaders */
+  .two-col { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); gap: 14px; }
+  @media (max-width: 980px) { .two-col { grid-template-columns: 1fr; } }
+  .legend { display: flex; flex-wrap: wrap; gap: 14px; font-size: 12px; color: var(--muted); margin-bottom: 8px; }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  #scatter { width: 100%; height: auto; display: block; }
+  #scatter text { font-family: inherit; }
+  .dot { cursor: pointer; }
+  .dot:hover, .dot.hl { stroke: var(--text); }
+  #leaders { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 10px; }
+  .pick { background: var(--panel2); border: 1px solid var(--border); border-radius: 8px; padding: 11px 12px; cursor: pointer; }
+  .pick:hover { border-color: var(--blue); }
+  .pick .top { display: flex; align-items: baseline; gap: 8px; }
+  .pick .tkr { font-size: 15px; font-weight: 800; }
+  .pick .sb { margin-left: auto; font-size: 12px; font-weight: 800; padding: 2px 8px; border-radius: 10px; background: rgba(63,185,80,.15); color: var(--green); font-variant-numeric: tabular-nums; }
+  .pick .nm { font-size: 11px; color: var(--muted); margin: 2px 0 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .pick .mets { font-size: 11px; line-height: 1.6; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .pick .mets b { color: var(--text); font-weight: 600; }
+  /* table */
+  .table-wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  th { text-align: right; color: var(--muted); font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: .4px; padding: 7px 8px; border-bottom: 1px solid var(--border); cursor: pointer; white-space: nowrap; user-select: none; }
+  th:hover { color: var(--text); }
+  th.l, td.l { text-align: left; }
+  th.sorted { color: var(--blue); }
+  td { padding: 7px 8px; border-bottom: 1px solid var(--panel2); text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  tr.stock-row { cursor: pointer; }
+  tr.stock-row:hover td { background: rgba(88,166,255,.04); }
+  .tk-cell { font-weight: 700; }
+  .scorebar { display: inline-flex; align-items: center; gap: 6px; justify-content: flex-end; }
+  .scorebar .bb, .scorebar .bf { display: block; }
+  .scorebar .bb { width: 52px; height: 8px; background: var(--panel2); border-radius: 4px; overflow: hidden; }
+  .scorebar .bf { height: 100%; border-radius: 4px; background: var(--green); }
+  .qtag { font-size: 10px; font-weight: 700; padding: 1px 7px; border-radius: 8px; white-space: nowrap; }
+  .q-Leader { background: rgba(63,185,80,.15); color: var(--green); }
+  .q-Defensive { background: rgba(88,166,255,.15); color: var(--blue); }
+  .q-High { background: rgba(210,153,34,.15); color: var(--amber); }
+  .q-Fragile { background: rgba(248,81,73,.15); color: var(--red); }
+  .flag { font-size: 10px; font-weight: 700; padding: 1px 5px; border-radius: 6px; margin-left: 3px; background: rgba(179,146,240,.18); color: var(--purple); }
+  .ix-tag { font-size: 9.5px; font-weight: 700; padding: 1px 5px; border-radius: 6px; margin-left: 6px; border: 1px solid var(--border); color: var(--muted); vertical-align: 1px; }
+  tr.detail td { background: var(--panel2); padding: 14px; text-align: left; white-space: normal; }
+  .detail-grid { display: grid; grid-template-columns: 270px minmax(0, 1fr); gap: 18px; align-items: start; }
+  @media (max-width: 760px) { .detail-grid { grid-template-columns: 1fr; } }
+  .detail-grid dl { display: grid; grid-template-columns: auto auto; gap: 3px 16px; font-size: 12px; }
+  .detail-grid dt { color: var(--muted); }
+  .detail-grid dd { text-align: right; font-variant-numeric: tabular-nums; }
+  .chart-cap { font-size: 11px; color: var(--muted); margin: 2px 0 4px; }
+  .dchart { width: 100%; height: auto; display: block; }
+  .ft-btn { background: var(--panel); border: 1px solid var(--purple); color: var(--purple); border-radius: 6px; padding: 5px 12px; font-size: 12px; font-weight: 600; cursor: pointer; margin-top: 10px; }
+  .ft-btn:hover { background: var(--purple); color: #0d1117; }
+  .ft-on { display: inline-block; margin-top: 10px; font-size: 12px; color: var(--purple); }
+  .ft-on a, .links a { color: var(--blue); text-decoration: none; }
+  .links { font-size: 12px; margin-top: 8px; }
+  #loading { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; color: var(--muted); font-size: 13px; padding: 80px 0; }
+  .spinner { width: 28px; height: 28px; border: 3px solid var(--border); border-top-color: var(--blue); border-radius: 50%; animation: spin 0.9s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  footer { padding: 0 24px 24px; font-size: 11px; color: var(--muted); line-height: 1.6; max-width: 980px; }
+  #tooltip { position: fixed; pointer-events: none; background: var(--panel2); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; font-size: 12px; line-height: 1.5; display: none; z-index: 10; max-width: 280px; box-shadow: 0 8px 24px rgba(0,0,0,.5); font-variant-numeric: tabular-nums; }
+  @media (max-width: 600px) {
+    header, .controls, main, footer { padding-left: 16px; padding-right: 16px; }
+    h1 .sub { display: block; margin: 4px 0 0; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>Bear Resilience<span class="sub">stocks holding up better than their own sector while it falls</span></h1>
+  <nav class="nav">
+    <a href="index.html">Flow Tracker</a>
+    <a href="stocks.html">Stock Picker</a>
+    <a href="resilience.html" class="active">Resilience</a>
+    <a href="themes.html">Themes</a>
+    <a href="assets.html">Asset Guide</a>
+    <a href="forward.html">Forward Test</a>
+  </nav>
+  <span id="status" class="badge">loading…</span>
+  <span id="updated"></span>
+</header>
+
+<div class="controls">
+  <input id="search" type="search" placeholder="Search ticker or company…" autocomplete="off" spellcheck="false">
+  <span class="label">Sectors</span>
+  <div class="seg" id="filter-seg">
+    <button data-f="stressed" class="active" title="Sectors now in a bear (≥10% below their 1-year high) or a pullback (≥5% below)">Under stress</button>
+    <button data-f="all" title="Every sector, each measured over its own deepest decline of the last year">All sectors</button>
+  </div>
+  <span class="label">Type</span>
+  <div class="seg" id="quad-seg">
+    <button data-q="" class="active">All</button>
+    <button data-q="Leader" title="Falls less than its sector AND rises more — the target">Leader</button>
+    <button data-q="Defensive" title="Falls less, rises less — low beta to its sector">Defensive</button>
+    <button data-q="High beta" title="Falls more, rises more">High beta</button>
+    <button data-q="Fragile" title="Falls more, rises less">Fragile</button>
+  </div>
+</div>
+
+<main>
+  <div id="loading"><div class="spinner"></div><div id="loading-msg">Loading market data…</div></div>
+  <div id="content" style="display:none; flex-direction:column; gap:14px">
+
+    <div class="card">
+      <h2>Market Backdrop</h2>
+      <div id="backdrop"></div>
+    </div>
+
+    <div class="card">
+      <h2>Sector Stress Windows</h2>
+      <div class="hint">For each sector ETF: <b style="color:var(--red)">BEAR</b> = now ≥10% below its 1-year high (window runs from that high to today); <b style="color:var(--amber)">PULLBACK</b> = 5–10% below; <b style="color:var(--blue)">RECOVERED</b> / CALM = back near its high, so its deepest decline of the year is used instead. Stocks are measured against their sector over that window only. Click a sector to focus on it.</div>
+      <div id="sector-strip"></div>
+    </div>
+
+    <div class="two-col">
+      <div class="card">
+        <h2 id="scatter-title">Downside vs Upside Capture</h2>
+        <div class="hint">Each dot is a stock vs its own sector during the stress window. <b>Left</b> = falls less than its sector on the sector's down days; <b>up</b> = rises more on its up days. 1.0 = moves exactly like the sector. Larger dot = higher resilience score. Click a dot for detail.</div>
+        <div class="legend" id="legend"></div>
+        <svg id="scatter" viewBox="0 0 640 420" role="img" aria-label="Scatter of downside capture vs upside capture"></svg>
+      </div>
+      <div class="card">
+        <h2>Bear Leaders</h2>
+        <div class="hint">Highest resilience score among <b style="color:var(--green)">Leaders</b> in the current view — fell less than their sector, kept up on rallies. Click to open the detail.</div>
+        <div id="leaders"></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2 id="table-title">Resilience Screener</h2>
+      <div class="hint">Resilience score (0–100, ranked <b>within each sector</b>) = downside capture 25% · relative drawdown 20% · sector-adjusted alpha 20% · RS line vs its 1-year high 15% · up/down volume 10% · bounce since the sector's low 10%. Click a column to sort, a row for the chart. <span class="flag">RS-LEAD</span> = relative-strength line at a 1-year high while its sector is still ≥5% below its own high — the classic early sign of a new leader.</div>
+      <div class="table-wrap">
+      <table id="screener">
+        <thead><tr>
+          <th class="l" data-k="t">Ticker</th>
+          <th class="l" data-k="sector">Sector</th>
+          <th data-k="score" class="sorted">Score ↓</th>
+          <th class="l" data-k="quad">Type</th>
+          <th data-k="price">Price</th>
+          <th data-k="stockDD" title="Stock's deepest drop inside the window">Stock DD</th>
+          <th data-k="secDD" title="Sector ETF's deepest drop inside the same window">Sector DD</th>
+          <th data-k="relDD" title="Stock drawdown ÷ sector drawdown. 0.5 = fell half as far">Rel DD</th>
+          <th data-k="relRet" title="Stock return minus sector return over the window">Rel ret</th>
+          <th data-k="downCap" title="Average stock return on the sector's down days ÷ the sector's. Below 1 = falls less; below 0 = rose on those days">Down cap</th>
+          <th data-k="upCap" title="Same on the sector's up days. Above 1 = rises more">Up cap</th>
+          <th data-k="alpha21" title="Regression intercept of daily stock returns on sector returns, per month. Positive = gains not explained by the sector">α /mo</th>
+          <th data-k="beta" title="Sensitivity to the sector inside the window">β</th>
+          <th data-k="rsHigh" title="Relative-strength line (stock ÷ sector) as % of its 1-year high">RS %H</th>
+          <th data-k="udVol" title="Volume on up days ÷ volume on down days inside the window. Above 1 = accumulation">U/D vol</th>
+          <th data-k="bounce" title="Stock return minus sector return since the sector's low">Bounce</th>
+          <th data-k="recoverDays" title="Trading days after the sector's low until the stock closed back above its 50-day average">Recov d</th>
+        </tr></thead>
+        <tbody id="tbody"></tbody>
+      </table>
+      </div>
+    </div>
+
+  </div>
+</main>
+
+<footer>
+  <strong>Method.</strong> A strong stock in a bear market is one that holds up better than <em>its own industry</em>, not just better than the S&amp;P 500 — otherwise every utility looks like a leader when tech sells off. For each sector ETF the page finds a stress window (its current decline if it is ≥10% off its 1-year high, otherwise its deepest peak-to-trough decline of the year) and measures every member stock over the same dates: downside/upside capture (mean stock return on the sector's down/up days ÷ the sector's), drawdown relative to the sector's, sector-adjusted alpha and beta (least squares on daily returns), the stock ÷ sector relative-strength line, up-day vs down-day volume, and the bounce off the sector's low. The four types split on capture ratios at 1.0, so <b>Defensive</b> names (low beta) are kept apart from true <b>Leaders</b> (fall less <em>and</em> rise more). Scores are percentile-ranked within each sector. Returns use dividend/split-adjusted closes over the last year of Yahoo Finance daily bars. Educational tool, not investment advice.
+</footer>
+
+<div id="tooltip"></div>
+
+<script src="scripts/stock_universe.js"></script>
+<script src="scripts/stock_model.js"></script>
+<script src="scripts/resilience_model.js"></script>
+<script src="scripts/market_data.js"></script>
+<script src="scripts/forward_model.js"></script>
+<script src="scripts/forward_store.js"></script>
+<script>
+const state = { etf: {}, stocks: {}, universe: STOCK_UNIVERSE, filter: "stressed", quad: "", sector: null, search: "", sortK: "score", sortDir: -1, open: null, updated: null };
+let res = null, momentum = null;
+
+const fmtPct = v => v == null ? "–" : (v >= 0 ? "+" : "") + (v * 100).toFixed(1) + "%";
+const fmtDD = v => v == null ? "–" : (v * 100).toFixed(1) + "%";
+const fmtX = v => v == null ? "–" : v.toFixed(2);
+const fmtPx = v => v >= 1000 ? v.toFixed(0) : v.toFixed(2);
+const cls = v => v == null ? "mut" : v >= 0 ? "pos" : "neg";
+const esc = s => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;");
+const fmtDate = d => new Date(d + "T12:00:00Z").toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+const QUADS = {
+  "Leader":    { c: "var(--green)", shape: "circle",   tag: "q-Leader" },
+  "Defensive": { c: "var(--blue)",  shape: "square",   tag: "q-Defensive" },
+  "High beta": { c: "var(--amber)", shape: "triangle", tag: "q-High" },
+  "Fragile":   { c: "var(--red)",   shape: "diamond",  tag: "q-Fragile" },
+};
+
+/* ================= data ================= */
+async function loadAll() {
+  try {
+    const r = await fetch("universe.json?t=" + Date.now(), { signal: AbortSignal.timeout(8000) });
+    if (r.ok) { const u = await r.json(); if (u?.sectors && u.count > 450) state.universe = u.sectors; }
+  } catch (e) { /* keep built-in fallback */ }
+  const [d, s] = await Promise.all([loadJson("data.json"), loadJson("stocks.json")]);
+  for (const [t, rows] of Object.entries(d.series)) if (rows.length > 25) state.etf[t] = rowsFromArr(rows);
+  for (const [t, rows] of Object.entries(s.series)) if (rows.length > 25) state.stocks[t] = rowsFromArr(rows);
+  state.updated = s.updated;
+}
+
+/* ================= views ================= */
+function stressedSet() {
+  return new Set(Object.values(res.sectors).filter(s => s.win.status === "bear" || s.win.status === "pullback").map(s => s.t));
+}
+
+function visibleStocks() {
+  const q = state.search.toUpperCase();
+  let list = res.stocks;
+  if (q) list = list.filter(s => s.t.includes(q) || s.n.toUpperCase().includes(q));
+  else if (state.sector) list = list.filter(s => s.sector === state.sector);
+  else if (state.filter === "stressed") { const st = stressedSet(); list = list.filter(s => st.has(s.sector)); }
+  if (state.quad) list = list.filter(s => s.quad === state.quad);
+  return list;
+}
+
+function renderBackdrop() {
+  const mb = marketBear(state.etf.SPY);
+  const sec = Object.values(res.sectors);
+  const bears = sec.filter(s => s.win.status === "bear"), pulls = sec.filter(s => s.win.status === "pullback");
+  const [label, color] = mb.bear ? ["BEAR MARKET", "var(--red)"] : mb.correction ? ["CORRECTION", "var(--amber)"] : bears.length ? ["SECTOR BEAR", "var(--amber)"] : ["NO BEAR", "var(--green)"];
+  const names = l => l.map(s => `<b>${SECTOR_NAMES[s.t]}</b> (${fmtDD(s.win.curDD)})`).join(", ");
+  document.getElementById("backdrop").innerHTML =
+    `<span class="verdict" style="color:${color};border-color:${color}">${label}</span>` +
+    `SPY is <b class="${cls(mb.dd)}">${fmtDD(mb.dd)}</b> from its 1-year high and <b class="${cls(mb.vsSma)}">${fmtPct(mb.vsSma)}</b> ${mb.below200 ? "below" : "above"} its 200-day average. ` +
+    (bears.length ? `In a bear now: ${names(bears)}. ` : "No sector is ≥10% below its high right now. ") +
+    (pulls.length ? `Pulling back: ${names(pulls)}.` : "") +
+    (mb.correction ? "" : ` <span class="mut">With the broad market calm, this page is most useful for the sectors under stress — or switch to <i>All sectors</i> to see who held up best in each sector's worst stretch of the year.</span>`);
+}
+
+function renderSectors() {
+  const order = { bear: 0, pullback: 1, recovered: 2, calm: 3 };
+  const list = Object.values(res.sectors).sort((a, b) => order[a.win.status] - order[b.win.status] || a.win.curDD - b.win.curDD);
+  document.getElementById("sector-strip").innerHTML = list.map(s => {
+    const w = s.win;
+    const lead = res.stocks.filter(x => x.sector === s.t && x.quad === "Leader").length;
+    return `<div class="sec-card ${state.sector === s.t ? "selected" : ""}" data-sec="${s.t}">
+      <div class="nm">${SECTOR_NAMES[s.t]} <span class="tk">${s.t}</span></div>
+      <span class="st st-${w.status}">${w.status}</span>
+      <div class="mets">Now ${fmtDD(w.curDD)} from high<br>Window ${fmtDate(w.peakDate)} → ${w.active ? "today" : fmtDate(w.troughDate)} (${w.days}d)<br>Deepest ${fmtDD(w.depth)} · ${lead}/${s.n} leaders</div>
+    </div>`;
+  }).join("");
+  document.querySelectorAll(".sec-card").forEach(el => el.addEventListener("click", () => {
+    state.sector = state.sector === el.dataset.sec ? null : el.dataset.sec;
+    state.open = null;
+    renderSectors(); renderView();
+  }));
+}
+
+/* ---------- scatter ---------- */
+function markerPath(shape, x, y, r) {
+  if (shape === "square") return `M${x - r},${y - r}h${2 * r}v${2 * r}h${-2 * r}Z`;
+  if (shape === "triangle") return `M${x},${y - r * 1.2}L${x + r * 1.1},${y + r * 0.8}L${x - r * 1.1},${y + r * 0.8}Z`;
+  if (shape === "diamond") return `M${x},${y - r * 1.25}L${x + r * 1.25},${y}L${x},${y + r * 1.25}L${x - r * 1.25},${y}Z`;
+  return `M${x - r},${y}a${r},${r} 0 1,0 ${2 * r},0a${r},${r} 0 1,0 ${-2 * r},0`;
+}
+
+function legendHtml() {
+  return Object.entries(QUADS).map(([q, v]) =>
+    `<span><svg width="14" height="14"><path d="${markerPath(v.shape, 7, 7, 5)}" fill="${v.c}"/></svg>${q}</span>`).join("");
+}
+
+function renderScatter(list) {
+  const svg = document.getElementById("scatter");
+  const W = 640, H = 420, m = { l: 46, r: 14, t: 12, b: 40 };
+  const xs = list.map(s => s.downCap).filter(v => v != null), ys = list.map(s => s.upCap).filter(v => v != null);
+  const q = (a, p) => { const s = [...a].sort((x, y) => x - y); return s.length ? s[Math.floor(p * (s.length - 1))] : 1; };
+  // domain from the 2nd–98th percentile so a couple of outliers don't squash the cloud; outliers pin to the edge
+  const x0 = Math.min(0, q(xs, 0.02)) - 0.1, x1 = Math.max(2, q(xs, 0.98)) + 0.1;
+  const y0 = Math.min(0, q(ys, 0.02)) - 0.1, y1 = Math.max(2, q(ys, 0.98)) + 0.1;
+  const X = v => m.l + (Math.min(x1, Math.max(x0, v)) - x0) / (x1 - x0) * (W - m.l - m.r);
+  const Y = v => H - m.b - (Math.min(y1, Math.max(y0, v)) - y0) / (y1 - y0) * (H - m.t - m.b);
+  const ticks = (a, b) => { const out = []; for (let v = Math.ceil(a * 2) / 2; v <= b; v += 0.5) out.push(+v.toFixed(1)); return out; };
+  let g = "";
+  for (const v of ticks(x0, x1)) g += `<line x1="${X(v)}" x2="${X(v)}" y1="${m.t}" y2="${H - m.b}" stroke="var(--border)" stroke-width="${v === 1 ? 1.5 : 0.5}" ${v === 1 ? 'stroke-dasharray="4 3"' : ""}/><text x="${X(v)}" y="${H - m.b + 16}" fill="var(--muted)" font-size="11" text-anchor="middle">${v}</text>`;
+  for (const v of ticks(y0, y1)) g += `<line x1="${m.l}" x2="${W - m.r}" y1="${Y(v)}" y2="${Y(v)}" stroke="var(--border)" stroke-width="${v === 1 ? 1.5 : 0.5}" ${v === 1 ? 'stroke-dasharray="4 3"' : ""}/><text x="${m.l - 8}" y="${Y(v) + 4}" fill="var(--muted)" font-size="11" text-anchor="end">${v}</text>`;
+  g += `<text x="${(m.l + W - m.r) / 2}" y="${H - 6}" fill="var(--muted)" font-size="11" text-anchor="middle">Downside capture vs sector → falls more</text>`;
+  g += `<text transform="translate(12 ${(m.t + H - m.b) / 2}) rotate(-90)" fill="var(--muted)" font-size="11" text-anchor="middle">Upside capture vs sector → rises more</text>`;
+  // low scores first so the best sit on top
+  const pts = list.filter(s => s.downCap != null && s.upCap != null).sort((a, b) => a.score - b.score);
+  g += pts.map(s => {
+    const v = QUADS[s.quad], r = 4 + s.score / 100 * 3.5;
+    return `<path class="dot${state.open === s.t ? " hl" : ""}" data-t="${s.t}" d="${markerPath(v.shape, X(s.downCap), Y(s.upCap), r)}" fill="${v.c}" fill-opacity=".85" stroke="var(--panel)" stroke-width="2"/>`;
+  }).join("");
+  // quadrant names drawn over the dots with a panel-colored halo so pinned outliers can't hide them
+  const corner = (txt, x, y, anchor, c) => `<text x="${x}" y="${y}" fill="${c}" font-size="11" font-weight="700" text-anchor="${anchor}" paint-order="stroke" stroke="var(--panel)" stroke-width="4" pointer-events="none">${txt}</text>`;
+  g += corner("LEADER", m.l + 8, m.t + 14, "start", "var(--green)") + corner("HIGH BETA", W - m.r - 8, m.t + 14, "end", "var(--amber)")
+     + corner("DEFENSIVE", m.l + 8, H - m.b - 8, "start", "var(--blue)") + corner("FRAGILE", W - m.r - 8, H - m.b - 8, "end", "var(--red)");
+  svg.innerHTML = g;
+  const tip = document.getElementById("tooltip");
+  svg.querySelectorAll(".dot").forEach(el => {
+    const s = res.stocks.find(x => x.t === el.dataset.t);
+    el.addEventListener("mousemove", e => {
+      tip.innerHTML = `<b>${s.t}</b> <span class="mut">${esc(s.n)}</span><br>${SECTOR_NAMES[s.sector]} · <b>${s.quad}</b> · score <b>${s.score.toFixed(0)}</b><br>Down capture <b>${fmtX(s.downCap)}</b> · up capture <b>${fmtX(s.upCap)}</b><br>Drawdown <b>${fmtDD(s.stockDD)}</b> vs sector ${fmtDD(s.secDD)}`;
+      tip.style.display = "block";
+      tip.style.left = Math.min(e.clientX + 14, innerWidth - 290) + "px";
+      tip.style.top = (e.clientY + 14) + "px";
+    });
+    el.addEventListener("mouseleave", () => tip.style.display = "none");
+    el.addEventListener("click", () => openStock(s.t));
+  });
+}
+
+function renderLeaders(list) {
+  const top = list.filter(s => s.quad === "Leader").slice(0, 8);
+  document.getElementById("leaders").innerHTML = top.length ? top.map(s => `
+    <div class="pick" data-t="${s.t}">
+      <div class="top"><span class="tkr">${s.t}</span><span class="sb">${s.score.toFixed(0)}</span></div>
+      <div class="nm">${esc(s.n)} · ${SECTOR_NAMES[s.sector]}</div>
+      <div class="mets">DD <b>${fmtDD(s.stockDD)}</b> vs sector ${fmtDD(s.secDD)}<br>Capture ↓<b>${fmtX(s.downCap)}</b> ↑<b>${fmtX(s.upCap)}</b><br>Since sector low <b class="${cls(s.bounce)}">${fmtPct(s.bounce)}</b>${s.rsLead ? ' <span class="flag">RS-LEAD</span>' : ""}</div>
+    </div>`).join("") : '<div class="mut" style="font-size:12px">No Leaders in this view.</div>';
+  document.querySelectorAll("#leaders .pick").forEach(el => el.addEventListener("click", () => openStock(el.dataset.t)));
+}
+
+/* ---------- detail charts ---------- */
+/* Stock and sector, both indexed to 100 a year ago, with the stress window shaded. */
+function priceChart(s) {
+  const pairs = alignPair(state.stocks[s.t], state.etf[s.sector]).slice(-252);
+  const w = res.sectors[s.sector].win;
+  const S = pairs.map(p => p.s.adj), B = pairs.map(p => p.b.adj);
+  const sI = S.map(v => 100 * v / S[0]), bI = B.map(v => 100 * v / B[0]);
+  const rsL = S.map((v, i) => v / B[i]); const rs0 = rsL[0]; const rsI = rsL.map(v => 100 * v / rs0);
+  const days = pairs.map(p => new Date(p.s.ts).toISOString().slice(0, 10));
+  const W = 620, m = { l: 40, r: 70, t: 8, b: 20 };
+  const n = pairs.length, X = i => m.l + i / (n - 1) * (W - m.l - m.r);
+  const ia = days.findIndex(d => d >= w.peakDate), ib = Math.max(ia, days.findIndex(d => d >= w.endDate) < 0 ? n - 1 : days.findIndex(d => d >= w.endDate));
+  const panel = (series, H, labels) => {
+    const all = series.flatMap(x => x.v), lo = Math.min(...all), hi = Math.max(...all), pad = (hi - lo) * 0.06 || 1;
+    const Y = v => m.t + (hi + pad - v) / (hi - lo + 2 * pad) * (H - m.t - m.b);
+    let g = `<rect x="${X(ia)}" y="${m.t}" width="${Math.max(2, X(ib) - X(ia))}" height="${H - m.t - m.b}" fill="var(--red)" opacity=".08"/>`;
+    for (const v of [lo, (lo + hi) / 2, hi]) g += `<line x1="${m.l}" x2="${W - m.r}" y1="${Y(v)}" y2="${Y(v)}" stroke="var(--border)" stroke-width=".5"/><text x="${m.l - 6}" y="${Y(v) + 4}" fill="var(--muted)" font-size="10" text-anchor="end">${v.toFixed(0)}</text>`;
+    for (const i of [0, Math.floor(n / 2), n - 1]) g += `<text x="${X(i)}" y="${H - 5}" fill="var(--muted)" font-size="10" text-anchor="${i === 0 ? "start" : i === n - 1 ? "end" : "middle"}">${fmtDate(days[i])}</text>`;
+    series.forEach((x, k) => {
+      g += `<polyline points="${x.v.map((v, i) => `${X(i).toFixed(1)},${Y(v).toFixed(1)}`).join(" ")}" fill="none" stroke="${x.c}" stroke-width="2" stroke-linejoin="round"/>`;
+      if (labels) g += `<text x="${W - m.r + 6}" y="${Y(x.v[n - 1]) + 4 + (k && Math.abs(Y(x.v[n - 1]) - Y(series[0].v[n - 1])) < 12 ? 12 : 0)}" fill="var(--text)" font-size="11" font-weight="600">${x.name}</text>`;
+    });
+    g += `<line class="xh" x1="0" x2="0" y1="${m.t}" y2="${H - m.b}" stroke="var(--muted)" stroke-width="1" visibility="hidden"/>`;
+    g += `<rect class="hit" x="${m.l}" y="0" width="${W - m.l - m.r}" height="${H}" fill="transparent"/>`;
+    return `<svg class="dchart" viewBox="0 0 ${W} ${H}" data-kind="${labels ? "px" : "rs"}">${g}</svg>`;
+  };
+  const html = `<div class="chart-cap">Price, indexed to 100 a year ago · <span style="color:var(--red)">shaded</span> = ${SECTOR_NAMES[s.sector]} stress window</div>` +
+    panel([{ v: bI, c: "var(--muted)", name: s.sector }, { v: sI, c: "var(--blue)", name: s.t }], 210, true) +
+    `<div class="chart-cap" style="margin-top:8px">Relative strength ${s.t} ÷ ${s.sector} (rising = beating its sector)</div>` +
+    panel([{ v: rsI, c: "var(--purple)", name: "RS" }], 110, false);
+  return { html, days, sI, bI, rsI, X, n, W };
+}
+
+function wireCrosshair(root, c, s) {
+  const tip = document.getElementById("tooltip");
+  root.querySelectorAll(".dchart").forEach(svg => svg.querySelector(".hit").addEventListener("mousemove", e => {
+    const box = svg.getBoundingClientRect();
+    const xv = (e.clientX - box.left) / box.width * c.W;
+    const i = Math.max(0, Math.min(c.n - 1, Math.round((xv - c.X(0)) / (c.X(c.n - 1) - c.X(0)) * (c.n - 1))));
+    root.querySelectorAll(".xh").forEach(l => { l.setAttribute("x1", c.X(i)); l.setAttribute("x2", c.X(i)); l.setAttribute("visibility", "visible"); });
+    tip.innerHTML = `<b>${fmtDate(c.days[i])}</b><br>${s.t} <b>${c.sI[i].toFixed(1)}</b> · ${s.sector} ${c.bI[i].toFixed(1)}<br>RS <b>${c.rsI[i].toFixed(1)}</b>`;
+    tip.style.display = "block";
+    tip.style.left = Math.min(e.clientX + 14, innerWidth - 200) + "px";
+    tip.style.top = (e.clientY + 14) + "px";
+  }));
+  root.querySelectorAll(".dchart .hit").forEach(h => h.addEventListener("mouseleave", () => {
+    tip.style.display = "none";
+    root.querySelectorAll(".xh").forEach(l => l.setAttribute("visibility", "hidden"));
+  }));
+}
+
+/* ---------- forward test ---------- */
+/* Same position shape as the Stock Picker's ▶ Track, so forward.html reports it
+   alongside the others; signal.score stays the momentum score, and the
+   resilience score travels as signal.resScore. */
+function startForward(t) {
+  const s = res.stocks.find(x => x.t === t), mo = momentum.stocks.find(x => x.t === t);
+  const spy = state.etf.SPY && state.etf.SPY[state.etf.SPY.length - 1];
+  if (!s || ForwardStore.openFor(t)) return;
+  const sec = momentum.sectors[s.sector];
+  ForwardStore.add({
+    t: s.t, name: s.n, sector: s.sector,
+    entryDate: dayOf(s.lastTs), entryPrice: s.price,
+    benchEntry: spy ? spy.close : null,
+    stop: mo && mo.atr ? +(s.price - 2 * mo.atr).toFixed(2) : null,
+    signal: {
+      score: mo ? +mo.score.toFixed(1) : null, quad: sec && sec.rrg ? sec.rrg.quad : null,
+      sectorRank: sec ? sec.rank : null, rs21: mo ? mo.rs21 : null, mfi: mo ? mo.mfi : null,
+      source: "resilience", resScore: +s.score.toFixed(1), resType: s.quad,
+    },
+  });
+  renderTable();
+}
+
+function forwardControl(t) {
+  const pos = ForwardStore.openFor(t);
+  if (!pos) return `<button class="ft-btn" data-ft="${t}" title="Track this pick from today's price until you stop it">&#9654; Start forward test</button>`;
+  const perf = state.stocks[t] ? positionPerf(pos, state.stocks[t], state.etf.SPY) : null;
+  return `<span class="ft-on">&#9679; Forward testing since ${pos.entryDate} at $${fmtPx(pos.entryPrice)}${perf ? ` <b class="${cls(perf.ret)}">${fmtPct(perf.ret)}</b>` : ""} <a href="forward.html">View →</a></span>`;
+}
+
+/* ---------- table ---------- */
+function openStock(t) {
+  const s = res.stocks.find(x => x.t === t);
+  if (!s) return;
+  if (!visibleStocks().some(x => x.t === t)) { state.search = ""; document.getElementById("search").value = ""; state.quad = ""; state.sector = s.sector; syncSegs(); renderSectors(); }
+  state.open = t;
+  renderView();
+  const row = document.querySelector(`tr.stock-row[data-t="${t}"]`);
+  if (row) row.scrollIntoView({ behavior: "smooth", block: "center" });
+}
+
+function renderTable() {
+  const list = [...visibleStocks()];
+  const k = state.sortK, dir = state.sortDir;
+  list.sort((a, b) => {
+    const va = a[k], vb = b[k];
+    if (va == null) return 1; if (vb == null) return -1;
+    return (typeof va === "string" ? va.localeCompare(vb) : va - vb) * dir;
+  });
+  document.getElementById("table-title").textContent = `Resilience Screener — ${state.search ? `search “${state.search}”` : state.sector ? SECTOR_NAMES[state.sector] : state.filter === "stressed" ? "sectors under stress" : "all sectors"}${state.quad ? " · " + state.quad : ""} (${list.length})`;
+  const tb = document.getElementById("tbody");
+  if (!list.length) { tb.innerHTML = '<tr><td colspan="17" class="l mut">No stocks match.</td></tr>'; return; }
+  tb.innerHTML = list.map(s => {
+    const w = res.sectors[s.sector].win;
+    let html = `<tr class="stock-row" data-t="${s.t}">
+      <td class="l tk-cell">${s.t}${s.sp ? "" : '<span class="ix-tag">NDX</span>'}${s.rsLead ? '<span class="flag">RS-LEAD</span>' : ""}<span class="mut" style="font-weight:400"> ${esc(s.n)}</span></td>
+      <td class="l mut">${s.sector}</td>
+      <td><span class="scorebar">${s.score.toFixed(0)}<span class="bb"><span class="bf" style="width:${s.score}%"></span></span></span></td>
+      <td class="l"><span class="qtag ${QUADS[s.quad].tag}">${s.quad}</span></td>
+      <td>${fmtPx(s.price)}</td>
+      <td class="neg">${fmtDD(s.stockDD)}</td>
+      <td class="mut">${fmtDD(s.secDD)}</td>
+      <td class="${s.relDD == null ? "mut" : s.relDD < 1 ? "pos" : "neg"}">${fmtX(s.relDD)}</td>
+      <td class="${cls(s.relRet)}">${fmtPct(s.relRet)}</td>
+      <td class="${s.downCap == null ? "mut" : s.downCap < 1 ? "pos" : "neg"}">${fmtX(s.downCap)}</td>
+      <td class="${s.upCap == null ? "mut" : s.upCap >= 1 ? "pos" : "neg"}">${fmtX(s.upCap)}</td>
+      <td class="${cls(s.alpha21)}">${fmtPct(s.alpha21)}</td>
+      <td>${fmtX(s.beta)}</td>
+      <td>${(s.rsHigh * 100).toFixed(0)}%</td>
+      <td class="${s.udVol == null ? "mut" : s.udVol >= 1 ? "pos" : "neg"}">${fmtX(s.udVol)}</td>
+      <td class="${cls(s.bounce)}">${fmtPct(s.bounce)}</td>
+      <td class="mut">${s.recoverDays == null ? "–" : s.recoverDays}</td>
+    </tr>`;
+    if (state.open === s.t) {
+      html += `<tr class="detail"><td colspan="17"><div class="detail-grid">
+        <div>
+          <div style="font-size:14px;font-weight:800;margin-bottom:6px">${s.t} <span class="mut" style="font-weight:400;font-size:12px">${esc(s.n)}</span></div>
+          <dl>
+            <dt>Sector</dt><dd>${SECTOR_NAMES[s.sector]} (${s.sector})</dd>
+            <dt>Stress window</dt><dd>${fmtDate(w.peakDate)} → ${w.active ? "today" : fmtDate(w.troughDate)}</dd>
+            <dt>Resilience score</dt><dd><b>${s.score.toFixed(0)}</b> (rank ${res.stocks.filter(x => x.sector === s.sector && x.score > s.score).length + 1} of ${s.peerN})</dd>
+            <dt>Type</dt><dd>${s.quad}</dd>
+            <dt>Return in window</dt><dd class="${cls(s.winRet)}">${fmtPct(s.winRet)} vs ${fmtPct(s.secWinRet)}</dd>
+            <dt>Max drawdown</dt><dd>${fmtDD(s.stockDD)} vs ${fmtDD(s.secDD)}</dd>
+            <dt>Capture down / up</dt><dd>${fmtX(s.downCap)} / ${fmtX(s.upCap)}</dd>
+            <dt>Alpha / beta</dt><dd>${fmtPct(s.alpha21)}/mo · β ${fmtX(s.beta)}</dd>
+            <dt>RS line vs 1y high</dt><dd>${(s.rsHigh * 100).toFixed(1)}%${s.rsLead ? " · RS-LEAD" : ""}</dd>
+            <dt>Up / down volume</dt><dd>${fmtX(s.udVol)}</dd>
+            <dt>Since sector low</dt><dd class="${cls(s.bounce)}">${fmtPct(s.bounce)} vs sector</dd>
+            <dt>Back above 50d</dt><dd>${s.recoverDays == null ? "not yet" : s.recoverDays + " days after the low"}</dd>
+          </dl>
+          ${forwardControl(s.t)}
+          <div class="links"><a href="stocks.html?q=${encodeURIComponent(s.t)}">Momentum score on Stock Picker →</a></div>
+        </div>
+        <div class="dchart-wrap"></div>
+      </div></td></tr>`;
+    }
+    return html;
+  }).join("");
+  tb.querySelectorAll("tr.stock-row").forEach(tr => tr.addEventListener("click", () => {
+    state.open = state.open === tr.dataset.t ? null : tr.dataset.t;
+    renderTable();
+    document.querySelectorAll("#scatter .dot").forEach(d => d.classList.toggle("hl", d.dataset.t === state.open));
+  }));
+  const wrap = tb.querySelector(".dchart-wrap");
+  if (wrap) {
+    const s = res.stocks.find(x => x.t === state.open);
+    const c = priceChart(s);
+    wrap.innerHTML = c.html;
+    wireCrosshair(wrap, c, s);
+  }
+  tb.querySelectorAll("[data-ft]").forEach(b => b.addEventListener("click", e => { e.stopPropagation(); startForward(b.dataset.ft); }));
+}
+
+function renderView() {
+  const list = visibleStocks();
+  document.getElementById("scatter-title").textContent = `Downside vs Upside Capture (${list.length})`;
+  renderScatter(list);
+  renderLeaders(list);
+  renderTable();
+}
+
+/* ================= wiring ================= */
+function syncSegs() {
+  document.querySelectorAll("#filter-seg button").forEach(b => b.classList.toggle("active", b.dataset.f === state.filter));
+  document.querySelectorAll("#quad-seg button").forEach(b => b.classList.toggle("active", b.dataset.q === state.quad));
+}
+document.getElementById("filter-seg").addEventListener("click", e => {
+  if (!e.target.dataset.f) return;
+  state.filter = e.target.dataset.f; state.sector = null; state.open = null;
+  syncSegs(); renderSectors(); renderView();
+});
+document.getElementById("quad-seg").addEventListener("click", e => {
+  if (e.target.dataset.q == null) return;
+  state.quad = e.target.dataset.q; state.open = null;
+  syncSegs(); renderView();
+});
+document.getElementById("search").addEventListener("input", e => { state.search = e.target.value.trim(); state.open = null; renderView(); });
+document.querySelectorAll("#screener th").forEach(th => th.addEventListener("click", () => {
+  const k = th.dataset.k;
+  if (state.sortK === k) state.sortDir *= -1; else { state.sortK = k; state.sortDir = ["relDD", "downCap", "stockDD", "secDD", "beta", "recoverDays", "t", "sector", "quad"].includes(k) ? 1 : -1; }
+  document.querySelectorAll("#screener th").forEach(t2 => { t2.classList.toggle("sorted", t2 === th); t2.textContent = t2.textContent.replace(/ [↓↑]$/, ""); });
+  th.textContent += state.sortDir < 0 ? " ↓" : " ↑";
+  renderTable();
+}));
+
+(async function init() {
+  const badge = document.getElementById("status");
+  try { await loadAll(); } catch (e) { /* handled below */ }
+  res = buildResilience(state.stocks, state.universe, state.etf);
+  momentum = buildModel(state.stocks, state.universe, state.etf);
+  document.getElementById("loading").style.display = "none";
+  if (!res.stocks.length || !state.etf.SPY) {
+    badge.textContent = "● no data"; badge.className = "badge sample";
+    document.getElementById("loading").style.display = "flex";
+    document.getElementById("loading").innerHTML = "Could not load data.json / stocks.json. Open this page from the GitHub Pages site or the local dev server (node scripts/dev_server.js).";
+    return;
+  }
+  badge.textContent = `● live · ${res.stocks.length} stocks`; badge.className = "badge live";
+  if (state.updated) document.getElementById("updated").textContent =
+    "Data updated " + new Date(state.updated).toLocaleString("en-GB", { timeZone: "Asia/Bangkok", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) + " GMT+7";
+  if (!stressedSet().size) state.filter = "all";
+  const q = new URLSearchParams(location.search).get("q");
+  if (q) { state.search = q.trim(); document.getElementById("search").value = state.search; }
+  document.getElementById("legend").innerHTML = legendHtml();
+  document.getElementById("content").style.display = "flex";
+  syncSegs(); renderBackdrop(); renderSectors(); renderView();
+  ForwardStore.onChange(st => { if (st.state !== "syncing") renderTable(); });
+  ForwardStore.sync();
+})();
+</script>
+</body>
+</html>

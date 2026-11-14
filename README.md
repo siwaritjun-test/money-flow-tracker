@@ -4,6 +4,8 @@ Live market-rotation monitor: estimates money flowing between US sectors, factor
 
 **Stock Picker** (`stocks.html`) turns the rotation signal into a momentum-style stock screen: sectors are ranked by money flow + RRG quadrant, then the **full S&P 500 plus the Nasdaq-100** (auto-refreshed constituent lists, `universe.json`; a Nasdaq-100 filter shows just those) is scored 0–100 on a composite of relative strength vs their own sector (1m/3m), Money Flow Index, OBV money-flow trend, distance to 52-week high, volume surge and 20/50-day trend filters. A search box filters by ticker/name, and **any other US ticker** can be pulled live from Yahoo (press Enter) and scored against the same percentiles. Includes a market-breadth gauge, accumulation/distribution divergence flags, unusual-volume alerts, an ATR-based stop-loss + position-size calculator, and a watchlist (saved in the browser). See `ARCHITECTURE.md` for the scaling plan (serverless backend → full backend).
 
+**Bear Resilience** (`resilience.html`) finds stocks holding up better than *their own sector* while it falls. For each sector ETF it picks a stress window (its current decline if ≥10% off its 1-year high, else its deepest decline of the year) and measures every member over those dates: downside/upside capture vs the sector, drawdown relative to the sector's, sector-adjusted alpha/beta, the stock ÷ sector relative-strength line (RS-LEAD flag when it sits at a 1-year high while the sector is still down), up/down-day volume and the bounce off the sector's low. A capture-ratio scatter splits stocks into Leader / Defensive / High beta / Fragile, the score (0–100) is ranked within each sector, and a detail row charts the stock vs its sector with the window shaded. ▶ *Start forward test* adds the pick to the Forward Test (resilience score stored as `signal.resScore`).
+
 **Forward Test** (`forward.html`) tracks picks you choose on the Stock Picker (▶ *Start forward test* in a stock's detail row, or ▶ *Track* on a Top Pick) from the price on screen at that moment until you press *Stop tracking*. Each position stores its signal at entry (score, sector quadrant, regime, 2×ATR stop), and the page shows its dividend-adjusted return against SPY over the same days, best/worst close since entry, whether the stop was traded through, an equal-weight portfolio curve vs SPY, and returns grouped by the entry signal. Positions live in the browser's localStorage (like the watchlist); export/import a JSON file to back up or move them.
 
 A **macro regime bar** sits above the views: risk-appetite ratios (discretionary/staples, high-beta/low-vol, equal-weight breadth, semis, small caps, high-yield credit, copper/gold — each scored on its ~1-month trend), the VIX level, and the 10y−3m yield-curve slope, summarized into a RISK-ON / MIXED / RISK-OFF verdict. Momentum signals are most trustworthy when they agree with the regime.
@@ -12,6 +14,7 @@ A **macro regime bar** sits above the views: risk-appetite ratios (discretionary
 
 - `index.html` — the tracker
 - `stocks.html` — momentum stock picker (sector rotation → stock selection)
+- `resilience.html` — bear-market resilience screen: stocks beating their own sector while it is under stress
 - `themes.html` — social-listening investment themes (1–2 month horizon): Reddit + ApeWisdom mentions + StockTwits trending + CNBC/MarketWatch/Yahoo headlines, scored against a 16-theme keyword dictionary, confirmed with 1-month basket returns; main theme finalized daily, refreshed every ~12h
 - `scripts/fetch_social.js` — the social-listening job (runs in the Action, self-skips unless social.json is ≥11h old)
 - `social.json` — created by the Action; theme scores, confidence, ticker buzz, daily winners
@@ -24,6 +27,7 @@ A **macro regime bar** sits above the views: risk-appetite ratios (discretionary
 - `scripts/fetch_universe.js` — refreshes `universe.json` (S&P 500 + Nasdaq-100 with sectors) from Wikipedia
 - `scripts/stock_universe.js` — built-in 88-stock fallback universe, used when universe.json is unavailable
 - `scripts/stock_model.js` — pure indicator/scoring math (MFI, OBV, ATR, composite score), shared by page and tests
+- `scripts/resilience_model.js` — resilience math (stress windows, capture ratios, relative drawdown, alpha/beta, RS line); tested by `scripts/test_resilience.js`
 - `.github/workflows/update-data.yml` — schedule: refreshes data every 2h on weekdays
 - `data.json` — created by the Action; the site loads this directly (no CORS proxies needed)
 - `universe.json` — created by the Action; current S&P 500 + Nasdaq-100 constituents grouped by sector ETF
