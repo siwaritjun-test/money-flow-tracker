@@ -41,24 +41,28 @@ const ICB_TO_ETF = {
 const TICKER_RE = /^[A-Z][A-Z0-9-]{0,6}$/;
 const strip = html => html.replace(/<[^>]*>/g, "").replace(/&amp;/g, "&").replace(/&#39;|&rsquo;/g, "'").replace(/\s+/g, " ").trim();
 
+// Returns rows as objects keyed by header text (footnote markers like "[2]" removed),
+// so an added/reordered column on Wikipedia doesn't silently shift the parse.
 async function tableRows(url) {
   const r = await fetch(url, { headers: { "User-Agent": UA }, signal: AbortSignal.timeout(20000) });
   if (!r.ok) throw new Error("HTTP " + r.status);
   const html = await r.text();
   const table = html.match(/<table[^>]*id="constituents"[\s\S]*?<\/table>/);
   if (!table) throw new Error("constituents table not found");
-  return table[0].match(/<tr[\s\S]*?<\/tr>/g).slice(1) // skip header
+  const rows = table[0].match(/<tr[\s\S]*?<\/tr>/g)
     .map(tr => (tr.match(/<t[dh][\s\S]*?<\/t[dh]>/g) || []).map(strip));
+  const head = rows[0].map(h => h.replace(/\[[^\]]*\]/g, "").trim());
+  return rows.slice(1).map(c => Object.fromEntries(head.map((h, i) => [h, c[i] || ""])));
 }
+const col = (row, ...names) => { for (const n of names) if (row[n]) return row[n]; return ""; };
 
-// Columns: Symbol | Security | GICS Sector | ...
 async function sp500() {
   const out = [];
-  for (const c of await tableRows(SP500_URL)) {
-    if (c.length < 3) continue;
-    const t = c[0].replace(/\./g, "-"); // BRK.B → BRK-B (Yahoo format)
-    const etf = SECTOR_TO_ETF[c[2]];
-    if (TICKER_RE.test(t) && c[1] && etf) out.push({ t, n: c[1], etf });
+  for (const row of await tableRows(SP500_URL)) {
+    const t = col(row, "Symbol", "Ticker").replace(/\./g, "-"); // BRK.B → BRK-B (Yahoo format)
+    const n = col(row, "Security", "Company");
+    const etf = SECTOR_TO_ETF[col(row, "GICS Sector")];
+    if (TICKER_RE.test(t) && n && etf) out.push({ t, n, etf, ind: col(row, "GICS Sub-Industry") });
   }
   // sanity: a real S&P 500 list has ~500 names across all 11 sectors
   if (out.length < 450 || new Set(out.map(s => s.etf)).size !== 11) {
@@ -67,14 +71,13 @@ async function sp500() {
   return out;
 }
 
-// Columns: Ticker | Company | ICB Industry | ICB Subsector
 async function nasdaq100() {
   const out = [];
-  for (const c of await tableRows(NDX_URL)) {
-    if (c.length < 3) continue;
-    const t = c[0].replace(/\./g, "-");
-    const etf = ICB_TO_ETF[c[2]];
-    if (TICKER_RE.test(t) && c[1] && etf) out.push({ t, n: c[1], etf });
+  for (const row of await tableRows(NDX_URL)) {
+    const t = col(row, "Ticker", "Symbol").replace(/\./g, "-");
+    const n = col(row, "Company", "Security");
+    const etf = ICB_TO_ETF[col(row, "ICB Industry")];
+    if (TICKER_RE.test(t) && n && etf) out.push({ t, n, etf, ind: col(row, "ICB Subsector") });
   }
   if (out.length < 95 || out.length > 110) throw new Error(`implausible Nasdaq-100 parse: ${out.length} tickers`);
   return out;
@@ -100,9 +103,9 @@ async function nasdaq100() {
   const inSp = new Set(sp.map(s => s.t));
   const sectors = {};
   const add = (etf, entry) => (sectors[etf] = sectors[etf] || []).push(entry);
-  for (const s of sp) add(s.etf, inNdx.has(s.t) ? { t: s.t, n: s.n, ndx: true } : { t: s.t, n: s.n });
+  for (const s of sp) add(s.etf, inNdx.has(s.t) ? { t: s.t, n: s.n, ind: s.ind, ndx: true } : { t: s.t, n: s.n, ind: s.ind });
   const ndxOnly = ndx.filter(s => !inSp.has(s.t));
-  for (const s of ndxOnly) add(s.etf, { t: s.t, n: s.n, ndx: true, sp: false });
+  for (const s of ndxOnly) add(s.etf, { t: s.t, n: s.n, ind: s.ind, ndx: true, sp: false });
 
   for (const list of Object.values(sectors)) list.sort((a, b) => a.t.localeCompare(b.t));
   const count = sp.length + ndxOnly.length;

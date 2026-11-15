@@ -103,6 +103,7 @@
   .star { cursor: pointer; color: var(--border); font-size: 14px; }
   .star.on { color: var(--amber); }
   .sec-chip { font-size: 10px; padding: 1px 7px; border-radius: 8px; }
+  .ind-cell { max-width: 190px; overflow: hidden; text-overflow: ellipsis; color: var(--muted); font-size: 12px; }
   .scorebar { display: inline-flex; align-items: center; gap: 6px; justify-content: flex-end; }
   .scorebar .bb { width: 52px; height: 8px; background: var(--panel2); border-radius: 4px; overflow: hidden; }
   .scorebar .bf { height: 100%; border-radius: 4px; }
@@ -221,6 +222,7 @@
           <th class="l" data-k="star" title="Watchlist">&#9733;</th>
           <th class="l" data-k="t">Ticker</th>
           <th class="l" data-k="sector">Sector</th>
+          <th class="l" data-k="ind" title="What the company does: GICS Sub-Industry (ICB Subsector for Nasdaq-only names)">Business</th>
           <th data-k="score" class="sorted">Score &darr;</th>
           <th data-k="price">Price</th>
           <th data-k="chg1d">1D</th>
@@ -556,6 +558,8 @@ function sparkSvg(vals, w = 240, h = 60) {
   </svg>`;
 }
 
+const secName = t => SECTOR_NAMES[t] || (t === "OTHER" ? "Other" : t);
+
 function visibleStocks() {
   let list = model.stocks;
   const q = state.search.toUpperCase();
@@ -570,7 +574,8 @@ function visibleStocks() {
   const k = state.sortK, d = state.sortDir;
   const sorted = [...list].sort((a, b) => {
     if (k === "t") return d === -1 ? a.t.localeCompare(b.t) : b.t.localeCompare(a.t);
-    if (k === "sector") return d === -1 ? a.sector.localeCompare(b.sector) : b.sector.localeCompare(a.sector);
+    if (k === "sector") return d === -1 ? secName(a.sector).localeCompare(secName(b.sector)) : secName(b.sector).localeCompare(secName(a.sector));
+    if (k === "ind") { if (!a.ind) return 1; if (!b.ind) return -1; return d === -1 ? a.ind.localeCompare(b.ind) : b.ind.localeCompare(a.ind); }
     if (k === "star") return -d * ((watchlist.has(b.t) ? 1 : 0) - (watchlist.has(a.t) ? 1 : 0));
     if (k === "flags") return -d * ((b.flagAcc + b.flagVol + b.flagHi) - (a.flagAcc + a.flagVol + a.flagHi));
     const va = a[k], vb = b[k];
@@ -669,7 +674,8 @@ function renderTable() {
     const main = `<tr class="stock-row" data-t="${s.t}">
       <td class="l"><span class="star ${watchlist.has(s.t) ? "on" : ""}" data-t="${s.t}">&#9733;</span></td>
       <td class="l tk-cell">${s.t}${s.sp ? "" : '<span class="ix-tag" title="Nasdaq-100 member outside the S&amp;P 500">NDX</span>'}${ForwardStore.openFor(s.t) ? '<span class="ft-badge" title="In your forward test">FT</span>' : ""}<span class="mut" style="font-weight:400"> ${esc(s.n)}</span></td>
-      <td class="l"><span class="sec-chip q-${quad}">${s.sector}</span></td>
+      <td class="l"><span class="sec-chip q-${quad}" title="${s.sector}">${secName(s.sector)}</span></td>
+      <td class="l ind-cell" title="${esc(s.ind)}">${s.ind ? esc(s.ind) : '<span class="mut">–</span>'}</td>
       <td><span class="scorebar"><span class="bb"><span class="bf" style="width:${s.score.toFixed(0)}%;background:${scoreColor(s.score)}"></span></span><b style="color:${scoreColor(s.score)}">${s.score.toFixed(0)}</b></span></td>
       <td>$${fmtPx(s.price)}</td>
       <td class="${cls(s.chg1d)}">${fmtPct2(s.chg1d)}</td>
@@ -686,7 +692,7 @@ function renderTable() {
     if (state.open !== s.t) return main;
     const sp = stopAndSize(s);
     const posValue = sp ? sp.shares * s.price : 0;
-    return main + `<tr class="detail"><td colspan="15"><div class="detail-grid">
+    return main + `<tr class="detail"><td colspan="16"><div class="detail-grid">
       <div>${sparkSvg(s.spark)}<div class="mut" style="font-size:11px;margin-top:2px">90 trading days, adjusted close + 20d SMA${session() === "pre" ? ' — <span style="color:var(--amber)">regular sessions only, PRE price not in this chart</span>' : ""}</div></div>
       <div style="display:flex;gap:28px;flex-wrap:wrap">
         <dl>
@@ -710,7 +716,7 @@ function renderTable() {
   // a ticker that isn't in the universe
   const q = state.search.toUpperCase().replace(/\./g, "-");
   if (state.search && TICKER_RE.test(state.search.toUpperCase()) && !model.stocks.some(s => s.t === q)) {
-    tb.innerHTML += `<tr><td colspan="15" class="l">
+    tb.innerHTML += `<tr><td colspan="16" class="l">
       <span class="mut">“${q}” is not in the S&amp;P 500 or Nasdaq-100 universe.</span>
       <button class="fetch-live-btn" id="fetch-live" style="margin-left:10px">Fetch ${q} live from Yahoo &amp; score it</button>
     </td></tr>`;
@@ -785,7 +791,7 @@ for (const id of ["acct", "riskpct"]) {
   if (!model.stocks.length) {
     badge.textContent = "● no data"; badge.className = "badge sample";
     document.getElementById("content").style.display = "flex";
-    document.getElementById("tbody").innerHTML = '<tr><td colspan="15" class="l mut">Could not load stock data. Host this page with the GitHub Action (stocks.json), or check your connection.</td></tr>';
+    document.getElementById("tbody").innerHTML = '<tr><td colspan="16" class="l mut">Could not load stock data. Host this page with the GitHub Action (stocks.json), or check your connection.</td></tr>';
     return;
   }
   badge.textContent = `● live · ${model.stocks.length} stocks`;
