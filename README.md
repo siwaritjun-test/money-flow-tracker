@@ -24,7 +24,7 @@ A **macro regime bar** sits above the views: risk-appetite ratios (discretionary
 - `scripts/forward_store.js` — forward-test positions in localStorage, with export/import
 - `scripts/market_data.js` — shared data loading (committed JSON, live Yahoo via CORS proxies)
 - `scripts/fetch_data.js` — server-side data fetcher (runs in GitHub Actions, no dependencies)
-- `scripts/fetch_universe.js` — refreshes `universe.json` (S&P 500 + Nasdaq-100 with sectors) from Wikipedia
+- `scripts/fetch_universe.js` — refreshes `universe.json` (S&P 500 + Nasdaq-100 with sectors) from Wikipedia, plus each stock's market cap (Yahoo quote API, Nasdaq screener fallback)
 - `scripts/stock_universe.js` — built-in 88-stock fallback universe, used when universe.json is unavailable
 - `scripts/stock_model.js` — pure indicator/scoring math (MFI, OBV, ATR, composite score), shared by page and tests
 - `scripts/resilience_model.js` — resilience math (stress windows, capture ratios, relative drawdown, alpha/beta, RS line); tested by `scripts/test_resilience.js`

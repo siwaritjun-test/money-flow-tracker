@@ -11,6 +11,10 @@
  *
  * Each entry is { t, n } plus flags: ndx: true when in the Nasdaq-100, and
  * sp: false for the Nasdaq-100 names that are not in the S&P 500.
+ *
+ * Market cap (mc, in $ millions) is added from Yahoo's quote API, falling back
+ * to Nasdaq's public screener; a ticker neither source returns keeps the cap
+ * from the previous universe.json, so a failed lookup never blanks the column.
  */
 const fs = require("fs");
 const path = require("path");
@@ -83,6 +87,68 @@ async function nasdaq100() {
   return out;
 }
 
+/* ---- market caps: ticker → $ millions ---- */
+const BROWSER_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36";
+
+// Yahoo's quote endpoint needs a session cookie + matching crumb.
+async function yahooCaps(tickers) {
+  const opt = extra => ({ headers: { "User-Agent": BROWSER_UA, ...extra }, signal: AbortSignal.timeout(20000) });
+  const seed = await fetch("https://fc.yahoo.com", opt()); // answers 404 but sets the cookie
+  const cookie = seed.headers.getSetCookie().map(c => c.split(";")[0]).join("; ");
+  if (!cookie) throw new Error("no Yahoo session cookie");
+  const cr = await fetch("https://query1.finance.yahoo.com/v1/test/getcrumb", opt({ Cookie: cookie }));
+  const crumb = (await cr.text()).trim();
+  if (!cr.ok || !crumb || crumb.length > 40) throw new Error("no Yahoo crumb (HTTP " + cr.status + ")");
+  const caps = {};
+  for (let i = 0; i < tickers.length; i += 100) {
+    const url = "https://query1.finance.yahoo.com/v7/finance/quote?fields=marketCap&symbols=" +
+      encodeURIComponent(tickers.slice(i, i + 100).join(",")) + "&crumb=" + encodeURIComponent(crumb);
+    const r = await fetch(url, opt({ Cookie: cookie }));
+    if (!r.ok) throw new Error("quote HTTP " + r.status);
+    for (const q of (await r.json())?.quoteResponse?.result || []) {
+      if (q.marketCap > 0) caps[q.symbol] = Math.round(q.marketCap / 1e6);
+    }
+  }
+  return caps;
+}
+
+async function nasdaqCaps() {
+  const r = await fetch("https://api.nasdaq.com/api/screener/stocks?tableonly=true&download=true",
+    { headers: { "User-Agent": BROWSER_UA, "Accept": "application/json" }, signal: AbortSignal.timeout(30000) });
+  if (!r.ok) throw new Error("HTTP " + r.status);
+  const caps = {};
+  for (const row of (await r.json())?.data?.rows || []) {
+    const mc = parseFloat(row.marketCap);
+    if (mc > 0) caps[String(row.symbol).trim().replace(/[/.]/g, "-")] = Math.round(mc / 1e6); // BRK/B → BRK-B
+  }
+  return caps;
+}
+
+async function marketCaps(tickers) {
+  const caps = {};
+  // last known caps first, so a ticker both sources miss keeps its old value
+  try {
+    const prev = JSON.parse(fs.readFileSync(path.join(ROOT, "universe.json"), "utf8"));
+    for (const s of Object.values(prev.sectors).flat()) if (s.mc > 0) caps[s.t] = s.mc;
+  } catch (e) { /* first run */ }
+  let fresh = {};
+  try {
+    fresh = await yahooCaps(tickers);
+  } catch (e) {
+    console.error("Yahoo market caps failed: " + e.message);
+  }
+  if (tickers.filter(t => fresh[t]).length < tickers.length * 0.9) {
+    try {
+      fresh = { ...(await nasdaqCaps()), ...fresh }; // Yahoo wins where both answer
+    } catch (e) {
+      console.error("Nasdaq market caps failed: " + e.message);
+    }
+  }
+  const got = tickers.filter(t => fresh[t]).length;
+  console.log(`Market caps: ${got}/${tickers.length} refreshed`);
+  return { ...caps, ...fresh };
+}
+
 (async function main() {
   let sp;
   try {
@@ -107,7 +173,11 @@ async function nasdaq100() {
   const ndxOnly = ndx.filter(s => !inSp.has(s.t));
   for (const s of ndxOnly) add(s.etf, { t: s.t, n: s.n, ind: s.ind, ndx: true, sp: false });
 
-  for (const list of Object.values(sectors)) list.sort((a, b) => a.t.localeCompare(b.t));
+  const caps = await marketCaps(Object.values(sectors).flat().map(s => s.t));
+  for (const list of Object.values(sectors)) {
+    for (const s of list) if (caps[s.t]) s.mc = caps[s.t];
+    list.sort((a, b) => a.t.localeCompare(b.t));
+  }
   const count = sp.length + ndxOnly.length;
   fs.writeFileSync(path.join(ROOT, "universe.json"), JSON.stringify({
     updated: new Date().toISOString(),

@@ -103,6 +103,11 @@
   .star { cursor: pointer; color: var(--border); font-size: 14px; }
   .star.on { color: var(--amber); }
   .sec-chip { font-size: 10px; padding: 1px 7px; border-radius: 8px; }
+  .cap-tag { display: inline-block; min-width: 38px; text-align: center; font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 8px; margin-left: 7px; border: 1px solid var(--border); }
+  .cap-mega { color: var(--purple); border-color: var(--purple); }
+  .cap-large { color: var(--blue); border-color: var(--blue); }
+  .cap-mid { color: var(--green); border-color: var(--green); }
+  .cap-small { color: var(--amber); border-color: var(--amber); }
   .ind-cell { max-width: 190px; overflow: hidden; text-overflow: ellipsis; color: var(--muted); font-size: 12px; }
   .scorebar { display: inline-flex; align-items: center; gap: 6px; justify-content: flex-end; }
   .scorebar .bb { width: 52px; height: 8px; background: var(--panel2); border-radius: 4px; overflow: hidden; }
@@ -166,6 +171,13 @@
     <button data-f="ndx" title="Nasdaq-100 members, including the ones outside the S&P 500">Nasdaq-100</button>
     <button data-f="watch" title="Your starred stocks (saved in this browser)">&#9733; Watchlist</button>
   </div>
+  <span class="label">Cap</span>
+  <div class="seg" id="cap-seg">
+    <button data-c="" class="active" title="Every market-cap size">All</button>
+    <button data-c="mega" title="Mega cap: $200B and above">Mega</button>
+    <button data-c="large" title="Large cap: $10B – $200B">Large</button>
+    <button data-c="mid" title="Mid cap: $2B – $10B">Mid</button>
+  </div>
   <span class="label">Risk</span>
   <div class="risk-inputs" title="Used for the stop-loss / position-size suggestion in each stock's detail row (click a row).">
     Account $ <input id="acct" type="number" min="0" step="1000" value="10000">
@@ -215,7 +227,7 @@
 
     <div class="card">
       <h2 id="table-title">Momentum Screener</h2>
-      <div class="hint">Composite score = relative strength vs own sector (1m 15% + 3m 20%) &middot; MFI-14 (12.5%) &middot; OBV money-flow trend (12.5%) &middot; distance to 52w high (15%) &middot; volume surge (10%) &middot; above 20/50-day SMA (15%). Cross-sectional metrics are percentile-ranked across the universe. Click a column to sort, a row for stop-loss &amp; position-size detail. Flags: <span class="flag f-acc">ACC</span> accumulation divergence (price down, OBV up) &middot; <span class="flag f-dist">DIST</span> distribution (price up, OBV down) &middot; <span class="flag f-vol">VOL</span> unusual volume today (&ge;2&times; normal) &middot; <span class="flag f-hi">HI</span> within 2% of 52-week high.</div>
+      <div class="hint">Composite score = relative strength vs own sector (1m 15% + 3m 20%) &middot; MFI-14 (12.5%) &middot; OBV money-flow trend (12.5%) &middot; distance to 52w high (15%) &middot; volume surge (10%) &middot; above 20/50-day SMA (15%). Cross-sectional metrics are percentile-ranked across the universe. Click a column to sort, a row for stop-loss &amp; position-size detail. Mkt Cap tiers: Mega &ge; $200B &middot; Large $10B&ndash;$200B &middot; Mid $2B&ndash;$10B &middot; Small &lt; $2B (not part of the score). Flags: <span class="flag f-acc">ACC</span> accumulation divergence (price down, OBV up) &middot; <span class="flag f-dist">DIST</span> distribution (price up, OBV down) &middot; <span class="flag f-vol">VOL</span> unusual volume today (&ge;2&times; normal) &middot; <span class="flag f-hi">HI</span> within 2% of 52-week high.</div>
       <div class="table-wrap">
       <table id="screener">
         <thead><tr>
@@ -223,6 +235,7 @@
           <th class="l" data-k="t">Ticker</th>
           <th class="l" data-k="sector">Sector</th>
           <th class="l" data-k="ind" title="What the company does: GICS Sub-Industry (ICB Subsector for Nasdaq-only names)">Business</th>
+          <th data-k="mc" title="Market capitalisation and its size tier — Mega: $200B and above · Large: $10B–$200B · Mid: $2B–$10B · Small: under $2B">Mkt Cap</th>
           <th data-k="score" class="sorted">Score &darr;</th>
           <th data-k="price">Price</th>
           <th data-k="chg1d">1D</th>
@@ -259,7 +272,7 @@
 /* ================= data layer ================= */
 const ETF_NEEDED = ["SPY", ...Object.keys(STOCK_UNIVERSE),
   "^VIX", "^TNX", "^IRX", "GC=F", "HG=F", "XLY", "XLP", "SPHB", "SPLV", "RSP", "SMH", "IWM", "HYG", "LQD"];
-const state = { etf: {}, stocks: {}, universe: STOCK_UNIVERSE, filter: "leaders", sector: null, search: "", sortK: "score", sortDir: -1, open: null, source: null, updated: null };
+const state = { etf: {}, stocks: {}, universe: STOCK_UNIVERSE, filter: "leaders", cap: "", sector: null, search: "", sortK: "score", sortDir: -1, open: null, source: null, updated: null };
 
 async function fetchSetLive(tickers, target, withHL, label) {
   let done = 0, ok = 0, idx = 0;
@@ -370,6 +383,10 @@ function renderRegime() {
 /* ================= formatting & helpers ================= */
 const fmtPct = v => v == null ? "–" : (v >= 0 ? "+" : "") + (v * 100).toFixed(1) + "%";
 const fmtPct2 = v => v == null ? "–" : (v >= 0 ? "+" : "") + (v * 100).toFixed(2) + "%";
+const fmtCap = m => m >= 1e6 ? "$" + (m / 1e6).toFixed(2) + "T" : m >= 1000 ? "$" + (m / 1000).toFixed(m >= 1e5 ? 0 : 1) + "B" : "$" + m.toFixed(0) + "M";
+const capLabel = id => { const c = CAP_TIERS.find(x => x.id === id); return c ? c.label : ""; };
+const capHtml = s => s.mc == null ? '<span class="mut">–</span>'
+  : `${fmtCap(s.mc)}<span class="cap-tag cap-${s.cap}" title="${capLabel(s.cap)} cap: ${CAP_TIERS.find(c => c.id === s.cap).range}">${capLabel(s.cap)}</span>`;
 const fmtM = v => { const a = Math.abs(v); return (v < 0 ? "−$" : "+$") + (a >= 1000 ? (a / 1000).toFixed(1) + "B" : a.toFixed(0) + "M"); };
 const fmtPx = v => v >= 1000 ? v.toFixed(0) : v.toFixed(2);
 const cls = v => v == null ? "mut" : v >= 0 ? "pos" : "neg";
@@ -570,6 +587,8 @@ function visibleStocks() {
   else if (state.filter === "leaders") { const lead = leaderSectors(); list = list.filter(s => lead.has(s.sector)); }
   else if (state.filter === "watch") list = list.filter(s => watchlist.has(s.t));
   else if (state.filter === "ndx") list = list.filter(s => s.ndx);
+  // the cap tier narrows whichever list is showing (search still spans every size)
+  if (state.cap && !q) list = list.filter(s => s.cap === state.cap);
   // sortDir -1 = the default click: descending for numbers, A→Z for text, flagged/starred first
   const k = state.sortK, d = state.sortDir;
   const sorted = [...list].sort((a, b) => {
@@ -666,7 +685,7 @@ function flagsHtml(s) {
 function renderTable() {
   const list = visibleStocks();
   document.getElementById("table-title").textContent =
-    `Momentum Screener — ${state.search ? `search “${state.search}”` : state.sector ? SECTOR_NAMES[state.sector] : state.filter === "leaders" ? "leading sectors" : state.filter === "watch" ? "watchlist" : state.filter === "ndx" ? "Nasdaq-100" : "all sectors"} (${list.length})`;
+    `Momentum Screener — ${state.search ? `search “${state.search}”` : state.sector ? SECTOR_NAMES[state.sector] : state.filter === "leaders" ? "leading sectors" : state.filter === "watch" ? "watchlist" : state.filter === "ndx" ? "Nasdaq-100" : "all sectors"}${state.cap && !state.search ? " · " + capLabel(state.cap).toLowerCase() + " cap" : ""} (${list.length})`;
   const tb = document.getElementById("tbody");
   tb.innerHTML = list.map(s => {
     const sec = model.sectors[s.sector];
@@ -676,6 +695,7 @@ function renderTable() {
       <td class="l tk-cell">${s.t}${s.sp ? "" : '<span class="ix-tag" title="Nasdaq-100 member outside the S&amp;P 500">NDX</span>'}${ForwardStore.openFor(s.t) ? '<span class="ft-badge" title="In your forward test">FT</span>' : ""}<span class="mut" style="font-weight:400"> ${esc(s.n)}</span></td>
       <td class="l"><span class="sec-chip q-${quad}" title="${s.sector}">${secName(s.sector)}</span></td>
       <td class="l ind-cell" title="${esc(s.ind)}">${s.ind ? esc(s.ind) : '<span class="mut">–</span>'}</td>
+      <td>${capHtml(s)}</td>
       <td><span class="scorebar"><span class="bb"><span class="bf" style="width:${s.score.toFixed(0)}%;background:${scoreColor(s.score)}"></span></span><b style="color:${scoreColor(s.score)}">${s.score.toFixed(0)}</b></span></td>
       <td>$${fmtPx(s.price)}</td>
       <td class="${cls(s.chg1d)}">${fmtPct2(s.chg1d)}</td>
@@ -692,7 +712,7 @@ function renderTable() {
     if (state.open !== s.t) return main;
     const sp = stopAndSize(s);
     const posValue = sp ? sp.shares * s.price : 0;
-    return main + `<tr class="detail"><td colspan="16"><div class="detail-grid">
+    return main + `<tr class="detail"><td colspan="17"><div class="detail-grid">
       <div>${sparkSvg(s.spark)}<div class="mut" style="font-size:11px;margin-top:2px">90 trading days, adjusted close + 20d SMA${session() === "pre" ? ' — <span style="color:var(--amber)">regular sessions only, PRE price not in this chart</span>' : ""}</div></div>
       <div style="display:flex;gap:28px;flex-wrap:wrap">
         <dl>
@@ -716,7 +736,7 @@ function renderTable() {
   // a ticker that isn't in the universe
   const q = state.search.toUpperCase().replace(/\./g, "-");
   if (state.search && TICKER_RE.test(state.search.toUpperCase()) && !model.stocks.some(s => s.t === q)) {
-    tb.innerHTML += `<tr><td colspan="16" class="l">
+    tb.innerHTML += `<tr><td colspan="17" class="l">
       <span class="mut">“${q}” is not in the S&amp;P 500 or Nasdaq-100 universe.</span>
       <button class="fetch-live-btn" id="fetch-live" style="margin-left:10px">Fetch ${q} live from Yahoo &amp; score it</button>
     </td></tr>`;
@@ -766,6 +786,12 @@ document.getElementById("filter-seg").addEventListener("click", e => {
   state.sector = null; state.open = null;
   document.querySelectorAll("#filter-seg button").forEach(b => b.classList.toggle("active", b === e.target));
   renderSectors(); renderTable();
+});
+document.getElementById("cap-seg").addEventListener("click", e => {
+  if (e.target.dataset.c == null) return;
+  state.cap = e.target.dataset.c; state.open = null;
+  document.querySelectorAll("#cap-seg button").forEach(b => b.classList.toggle("active", b === e.target));
+  renderTable();
 });
 document.querySelectorAll("#screener th").forEach(th => th.addEventListener("click", () => {
   const k = th.dataset.k;

@@ -39,6 +39,18 @@ check(model.stocks.every(s => s.atr == null || s.atr > 0), "all ATR values posit
 check(model.stocks.every(s => s.prox52 == null || (s.prox52 > 0.2 && s.prox52 <= 1.0001)), "52w-high proximity in (0.2, 1]");
 check(model.stocks.every(s => s.obvT == null || Math.abs(s.obvT) <= 21.0001), "OBV trend bounded by ±21 days");
 
+// market-cap tiers
+const { capTier } = require("./stock_model");
+check(capTier(200000) === "mega" && capTier(199999) === "large" && capTier(10000) === "large" && capTier(9999) === "mid" &&
+  capTier(2000) === "mid" && capTier(1999) === "small" && capTier(0) === null && capTier(undefined) === null, "capTier boundaries");
+if (Object.values(universe).flat().some(s => s.mc)) {
+  const withCap = model.stocks.filter(s => s.mc);
+  check(withCap.length >= model.stocks.length * 0.95, `market cap known for ${withCap.length}/${model.stocks.length} stocks`);
+  check(model.stocks.every(s => (s.mc == null) === (s.cap == null)), "every stock with a cap has a tier");
+  const nv = model.stocks.find(s => s.t === "NVDA");
+  check(nv && nv.cap === "mega", `NVDA is mega cap ($${nv && (nv.mc / 1e6).toFixed(2)}T)`);
+}
+
 // scores must actually discriminate
 const scores = model.stocks.map(s => s.score);
 check(Math.max(...scores) - Math.min(...scores) > 30, `score spread ${(Math.max(...scores) - Math.min(...scores)).toFixed(0)} > 30`);

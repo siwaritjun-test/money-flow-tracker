@@ -186,6 +186,19 @@ function pctRank(sortedVals, v) { // fraction of universe at or below v
   return lo / sortedVals.length;
 }
 
+/* Market-cap tiers. Caps arrive in $ millions (universe.json "mc"); min is the
+   lower bound in $ millions. Order matters: largest first. */
+const CAP_TIERS = [
+  { id: "mega",  label: "Mega",  min: 200000, range: "$200B and above" },
+  { id: "large", label: "Large", min: 10000,  range: "$10B – $200B" },
+  { id: "mid",   label: "Mid",   min: 2000,   range: "$2B – $10B" },
+  { id: "small", label: "Small", min: 0,      range: "under $2B" },
+];
+function capTier(mcM) {
+  if (!(mcM > 0)) return null;
+  return CAP_TIERS.find(c => mcM >= c.min).id;
+}
+
 const SCORE_WEIGHTS = { rs63: 0.20, rs21: 0.15, mfi: 0.125, obvT: 0.125, prox52: 0.15, volX: 0.10, trend: 0.15 };
 
 /* Build the full model: per-stock metrics + relative strength vs own sector,
@@ -220,11 +233,13 @@ function buildModel(stockSeries, universe, etfSeries, opts = {}) {
   const stocks = [];
   for (const [sec, list] of Object.entries(universe)) {
     const secM = sectors[sec];
-    for (const { t, n, ind, ndx, sp } of list) {
+    for (const { t, n, ind, ndx, sp, mc } of list) {
       const m = stockMetrics(stockSeries[t]);
       if (!m) continue;
       m.t = t; m.n = n; m.sector = sec;
       m.ind = ind || "";     // industry label (GICS Sub-Industry / ICB Subsector)
+      m.mc = mc > 0 ? mc : null; // market cap, $ millions (null when unknown, e.g. live-fetched tickers)
+      m.cap = capTier(mc);    // "mega" | "large" | "mid" | "small" | null
       m.ndx = !!ndx;          // in the Nasdaq-100
       m.sp = sp !== false;    // in the S&P 500 (every entry unless marked otherwise)
       m.rs21 = (secM && secM.ret21 != null && m.ret21 != null) ? m.ret21 - secM.ret21 : null;
@@ -272,5 +287,5 @@ function buildModel(stockSeries, universe, etfSeries, opts = {}) {
 }
 
 if (typeof module !== "undefined") {
-  module.exports = { smaLast, nRet, mfi, obvTrend, dollarFlow, atr, volSurge, stockMetrics, rrgPoint, sectorFlows, pctRank, buildModel, SCORE_WEIGHTS, marketSession, parsePreFromChart };
+  module.exports = { smaLast, nRet, mfi, obvTrend, dollarFlow, atr, volSurge, stockMetrics, rrgPoint, sectorFlows, pctRank, buildModel, SCORE_WEIGHTS, marketSession, parsePreFromChart, CAP_TIERS, capTier };
 }
