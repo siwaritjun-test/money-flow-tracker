@@ -30,7 +30,7 @@ A **macro regime bar** sits above the views: risk-appetite ratios (discretionary
 - `scripts/resilience_model.js` — resilience math (stress windows, capture ratios, relative drawdown, alpha/beta, RS line); tested by `scripts/test_resilience.js`
 - `.github/workflows/update-data.yml` — schedule: refreshes data every 2h on weekdays
 - `data.json` — created by the Action; the site loads this directly (no CORS proxies needed)
-- `scripts/build_screen.js` — builds `screen.json` (precomputed metrics for the S&P 500 + Nasdaq-100 plus every other US common stock of $1B+ market cap, listed via Nasdaq's public screener) and `sparks.json` (sparklines, loaded on demand); the Stock Picker loads these instead of the raw bars in `stocks.json`
+- `scripts/build_screen.js` — builds `screen.json` (precomputed metrics for the S&P 500 + Nasdaq-100 plus every other US common stock of $1B+ market cap, listed via Nasdaq's public screener) `resilience.json` (the Resilience page's scores for the same universe) and `charts/<sector>.json` (price lines for the detail charts, loaded on demand); the Stock Picker and Resilience pages load these instead of the raw bars in `stocks.json`
 - `universe.json` — created by the Action; current S&P 500 + Nasdaq-100 constituents grouped by sector ETF
 - `stocks.json` — created by the Action; daily bars (with high/low) for the stock universe, refreshed once per trading day
 - `archive.json` — created by the Action; permanent daily history that grows beyond Yahoo's window

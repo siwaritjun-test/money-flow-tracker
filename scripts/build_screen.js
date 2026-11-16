@@ -5,7 +5,10 @@
  *   screen.json — per-stock metrics for the S&P 500 + Nasdaq-100 (bars from
  *                 stocks.json) plus the extended universe: every other
  *                 US-listed common stock with a market cap of $1B or more.
- *   sparks.json — 90-day price sparklines, loaded only when a row is opened.
+ *   resilience.json — the Resilience page's per-stock metrics and scores for the
+ *                 same universe (index members + extended).
+ *   charts/<sector>.json — year-long price lines for the detail charts, one file
+ *                 per sector, loaded only when a row of that sector is opened.
  *
  * The extended list comes from Nasdaq's public screener (ticker, name, market
  * cap, sector, industry). Its bars are fetched from Yahoo here, turned into
@@ -17,6 +20,7 @@ const fs = require("fs");
 const path = require("path");
 const { fetchSet, loadUniverse, trackedTickers } = require("./fetch_data");
 const { stockMetrics, describeStock } = require("./stock_model");
+const { buildResilience, RES_QUADS } = require("./resilience_model");
 
 const ROOT = path.join(__dirname, "..");
 const MIN_CAP_M = 1000; // extended universe floor, $ millions
@@ -70,10 +74,18 @@ function encodeRow(m) {
     rnd(m.mfi, 1), rnd(m.obvT, 2), sig(m.flow21, 4), sig(m.atr, 4), rnd(m.volX, 3), rnd(m.prox52, 4),
     (m.aboveS20 ? 1 : 0) | (m.aboveS50 ? 2 : 0), Math.round(m.avgDollarVol || 0), rnd(m.unusualVol, 2)];
 }
-// sparkline → two base-36 chars per point, scaled 0–1295 between its own min and max
-function encodeSpark(vals) {
-  const min = Math.min(...vals), span = (Math.max(...vals) - min) || 1;
-  return vals.map(v => Math.round((v - min) / span * 1295).toString(36).padStart(2, "0")).join("");
+// price line → [min, max, two base-36 chars per point scaled 0–1295 between them]
+function encodeChart(vals) {
+  const min = Math.min(...vals), max = Math.max(...vals), span = (max - min) || 1;
+  return [sig(min, 6), sig(max, 6), vals.map(v => Math.round((v - min) / span * 1295).toString(36).padStart(2, "0")).join("")];
+}
+const RES_COLS = ["t", "n", "sector", "ix", "price", "lastTs", "score", "peerN", "quad", "downCap", "upCap", "alpha21", "beta",
+  "stockDD", "secDD", "relDD", "winRet", "secWinRet", "udVol", "rsHigh", "bounce", "recoverDays"];
+function encodeRes(m) {
+  return [m.t, m.n, m.sector, (m.sp ? 1 : 0) | (m.ndx ? 2 : 0) | (m.ext ? 4 : 0) | (m.rsLead ? 8 : 0),
+    sig(m.price, 6), Math.round(m.lastTs / 1000), rnd(m.score, 2), m.peerN, m.quad == null ? null : RES_QUADS.indexOf(m.quad),
+    rnd(m.downCap, 3), rnd(m.upCap, 3), rnd(m.alpha21, 4), rnd(m.beta, 3), rnd(m.stockDD, 4), rnd(m.secDD, 4), rnd(m.relDD, 3),
+    rnd(m.winRet, 4), rnd(m.secWinRet, 4), rnd(m.udVol, 3), rnd(m.rsHigh, 4), rnd(m.bounce, 4), m.recoverDays];
 }
 
 (async function main() {
@@ -83,7 +95,8 @@ function encodeSpark(vals) {
 
   let prev = null;
   try { prev = readJson("screen.json"); } catch (e) {}
-  if (prev && prev.coreUpdated === stk.updated && prev.minCapM === MIN_CAP_M && !process.argv.includes("--force")) {
+  const haveAll = fs.existsSync(path.join(ROOT, "resilience.json")) && fs.existsSync(path.join(ROOT, "charts"));
+  if (prev && haveAll && prev.coreUpdated === stk.updated && prev.minCapM === MIN_CAP_M && !process.argv.includes("--force")) {
     console.log("screen.json is current (same stocks.json) — skipping.");
     return;
   }
@@ -119,13 +132,15 @@ function encodeSpark(vals) {
   }
 
   // metrics
-  const all = [], sparks = {};
+  const all = [], charts = {}, coreRows = {}, extRows = {};
   const add = (uni, series, isExt) => {
     for (const [sec, list] of Object.entries(uni)) for (const entry of list) {
       const raw = series[entry.t];
-      const m = raw && stockMetrics(toRows(raw));
+      const rows = raw && toRows(raw);
+      const m = rows && stockMetrics(rows);
       if (!m) continue;
-      sparks[entry.t] = encodeSpark(m.spark);
+      (isExt ? extRows : coreRows)[entry.t] = rows;
+      (charts[sec] = charts[sec] || {})[entry.t] = encodeChart(rows.slice(-252).map(r => r.adj));
       all.push(describeStock(m, sec, entry, isExt));
     }
   };
@@ -161,6 +176,21 @@ function encodeSpark(vals) {
     return;
   }
   fs.writeFileSync(path.join(ROOT, "screen.json"), JSON.stringify(out));
-  fs.writeFileSync(path.join(ROOT, "sparks.json"), JSON.stringify({ updated: out.updated, points: 90, s: sparks }));
-  console.log(`Wrote screen.json (${out.counts.core} index + ${out.counts.ext} extended stocks) and sparks.json`);
+  console.log(`Wrote screen.json (${out.counts.core} index + ${out.counts.ext} extended stocks)`);
+
+  // Resilience page: same universe, scored within each sector against its index members.
+  const etf = {};
+  for (const [t, rows] of Object.entries(data.series)) etf[t] = toRows(rows);
+  const res = buildResilience(coreRows, core, etf, { ext: { universe: ext, series: extRows } });
+  fs.writeFileSync(path.join(ROOT, "resilience.json"), JSON.stringify({
+    updated: out.updated, coreUpdated: stk.updated, sectors: res.sectors, cols: RES_COLS, rows: res.stocks.map(encodeRes),
+  }));
+  console.log(`Wrote resilience.json (${res.stocks.length} stocks)`);
+
+  // Detail charts, one file per sector.
+  const dir = path.join(ROOT, "charts");
+  fs.mkdirSync(dir, { recursive: true });
+  for (const f of fs.readdirSync(dir)) if (f.endsWith(".json")) fs.unlinkSync(path.join(dir, f));
+  for (const [sec, m] of Object.entries(charts)) fs.writeFileSync(path.join(dir, sec + ".json"), JSON.stringify(m));
+  console.log(`Wrote charts/ (${Object.keys(charts).length} sector files)`);
 })().catch(e => console.error("build_screen failed (previous files kept): " + e.message));

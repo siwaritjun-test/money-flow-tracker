@@ -45,7 +45,7 @@ jobs:
         run: |
           git config user.name "data-bot"
           git config user.email "actions@github.com"
-          git add data.json archive.json stocks.json universe.json social.json screen.json sparks.json
+          git add data.json archive.json stocks.json universe.json social.json screen.json resilience.json charts
           if git diff --cached --quiet; then
             echo "No changes."
           else

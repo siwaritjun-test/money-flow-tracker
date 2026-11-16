@@ -208,11 +208,13 @@ function themeMatches(text) {
   return THEMES.filter(th => th.kw.some(k => lc.includes(k)));
 }
 
-function extractTickers(text, validSet) {
+// cashOnly: tickers accepted only when written as a cashtag ($OKLO) — the extended
+// universe has too many that are ordinary words (CAR, FUN, GO…) to trust bare caps.
+function extractTickers(text, validSet, cashOnly = new Set()) {
   const found = new Map(); // t → weight
   for (const m of text.matchAll(/\$([A-Za-z]{1,5})\b/g)) {
     const t = m[1].toUpperCase();
-    if (validSet.has(t)) found.set(t, Math.max(found.get(t) || 0, 1));
+    if (validSet.has(t) || cashOnly.has(t)) found.set(t, Math.max(found.get(t) || 0, 1));
   }
   for (const m of text.matchAll(/\b([A-Z]{2,5})\b/g)) {
     const t = m[1];
@@ -245,6 +247,14 @@ async function fetchRet21(t) { // 1-month adjusted return for basket confirmatio
   try {
     const u = JSON.parse(fs.readFileSync(path.join(ROOT, "universe.json"), "utf8"));
     for (const list of Object.values(u.sectors || {})) for (const s of list) validSet.add(s.t);
+  } catch (e) {}
+
+  // extended universe (US stocks ≥ $1B, from screen.json): cashtags only
+  const cashOnly = new Set();
+  try {
+    const sc = JSON.parse(fs.readFileSync(path.join(ROOT, "screen.json"), "utf8"));
+    const ti = sc.cols.indexOf("t");
+    for (const r of sc.rows) if (!validSet.has(r[ti])) cashOnly.add(r[ti]);
   } catch (e) {}
 
   console.log("Fetching sources…");
@@ -280,7 +290,7 @@ async function fetchRet21(t) { // 1-month adjusted return for basket confirmatio
 
   for (const p of reddit) {
     const w = 1 + Math.log10(1 + p.score + p.comments);
-    const tk = extractTickers(p.text, validSet);
+    const tk = extractTickers(p.text, validSet, cashOnly);
     for (const [t, tw] of tk) addBuzz(t, w * tw, "reddit");
     for (const th of themeMatches(p.text)) {
       S[th.id].reddit += w;
@@ -296,7 +306,7 @@ async function fetchRet21(t) { // 1-month adjusted return for basket confirmatio
   }
   for (const h of headlines) {
     const w = 2.5;
-    const tk = extractTickers(h.title, validSet);
+    const tk = extractTickers(h.title, validSet, cashOnly);
     for (const [t, tw] of tk) addBuzz(t, w * tw, "news");
     for (const th of themeMatches(h.title)) {
       S[th.id].news += w;

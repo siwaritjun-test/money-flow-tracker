@@ -85,6 +85,21 @@ if (data && stk) {
   check(res.stocks.every(s => s.stockDD <= 0 && s.secDD <= 0), "drawdowns are ≤ 0");
   check(res.stocks.every(s => s.rsHigh > 0 && s.rsHigh <= 1.0001), "RS-line proximity within (0, 1]");
   check(res.stocks.every(s => s.quad), "every stock has a quadrant");
+  // resilience.json (what resilience.html loads) must reproduce the raw-bar
+  // scores for index members; extended stocks must not move them.
+  try {
+    const { decodeResilience } = require("./resilience_model");
+    const rj = JSON.parse(fs.readFileSync(path.join(ROOT, "resilience.json"), "utf8"));
+    const dec = decodeResilience(rj);
+    const ext = dec.stocks.filter(s => s.ext);
+    check(ext.length > 500, `resilience.json carries ${ext.length} extended stocks`);
+    check(dec.stocks.every(s => s.score >= 0 && s.score <= 100 && s.quad && res.sectors[s.sector]), "decoded stocks have a score, a type and a known sector");
+    if (rj.coreUpdated === stk.updated) {
+      const byT = new Map(res.stocks.map(s => [s.t, s.score]));
+      const diffs = dec.stocks.filter(s => !s.ext && byT.has(s.t)).map(s => Math.abs(s.score - byT.get(s.t)));
+      check(diffs.length >= res.stocks.length * 0.95 && Math.max(...diffs) < 0.5, `resilience.json scores match the raw-bar model for ${diffs.length} index stocks (max diff ${Math.max(...diffs).toFixed(3)})`);
+    }
+  } catch (e) { if (e.code !== "ENOENT") throw e; console.log("SKIP  resilience.json checks (file not present)"); }
   const mb = marketBear(etf.SPY);
   check(mb && mb.dd <= 0, `market backdrop: SPY ${(mb.dd * 100).toFixed(1)}% from high, ${mb.below200 ? "below" : "above"} 200d`);
 

@@ -282,7 +282,6 @@ const state = { etf: {}, stocks: {}, universe: STOCK_UNIVERSE, filter: "leaders"
   scope: localStorage.getItem("mft-scope") === "core" ? "core" : "all",
   metrics: null,   // per-stock metrics decoded from screen.json (null → built from raw bars instead)
   fwd: {},         // slim bars for open forward tests, from screen.json
-  sparks: null, sparksLoading: false,
   limit: 200, viewSig: "" };
 const PAGE = 200;   // rows drawn at a time
 
@@ -316,17 +315,6 @@ async function loadUniverse() {
 /* screen.json = every stock's metrics, precomputed by the GitHub Action
    (scripts/build_screen.js) — ~120 KB over the wire instead of the multi-MB
    raw bars in stocks.json. */
-function decodeScreen(sc) {
-  const c = Object.fromEntries(sc.cols.map((k, i) => [k, i]));
-  return sc.rows.map(r => {
-    const ix = r[c.ix], tr = r[c.trend];
-    return describeStock({
-      price: r[c.price], lastTs: r[c.lastTs] * 1000, chg1d: r[c.chg1d], ret5: r[c.ret5], ret21: r[c.ret21], ret63: r[c.ret63],
-      mfi: r[c.mfi], obvT: r[c.obvT], flow21: r[c.flow21], atr: r[c.atr], volX: r[c.volX], prox52: r[c.prox52],
-      aboveS20: !!(tr & 1), aboveS50: !!(tr & 2), avgDollarVol: r[c.avgDollarVol] || null, unusualVol: r[c.unusualVol],
-    }, r[c.sector], { t: r[c.t], n: r[c.n], ind: r[c.ind], mc: r[c.mc], ndx: !!(ix & 2), sp: !!(ix & 1) }, !!(ix & 4));
-  });
-}
 async function loadScreen() {
   const get = async f => {
     const r = await fetch(f + "?t=" + Date.now(), { signal: AbortSignal.timeout(10000) });
@@ -338,9 +326,7 @@ async function loadScreen() {
   if (!fresh(d) || !fresh(sc) || !(sc.rows && sc.rows.length > 300)) throw new Error("stale or empty screen.json");
   for (const [t, rows] of Object.entries(d.series)) if (rows.length > 25) state.etf[t] = rowsFromArr(rows);
   state.metrics = decodeScreen(sc);
-  for (const [t, rows] of Object.entries(sc.fwd || {})) {
-    state.fwd[t] = rows.map(([ts, close, adj, low]) => ({ ts, close, vol: 0, adj: adj > 0 ? adj : close, high: close, low: low > 0 ? low : close }));
-  }
+  state.fwd = decodeFwd(sc);
   state.source = "live"; state.updated = sc.coreUpdated || sc.updated;
 }
 
@@ -626,23 +612,13 @@ function sparkSvg(vals, w = 240, h = 60) {
 
 const inScope = s => state.scope === "all" || !s.ext;
 
-/* Sparklines live in their own file (sparks.json), fetched the first time a
-   row is opened: two base-36 chars per point, scaled between min and max. */
+/* Sparkline = the last 90 points of the stock's year-long line, which lives in
+   its sector's chart file and is fetched the first time such a row is opened. */
 function sparkFor(s) {
   if (s.spark) return s.spark;
-  const enc = state.sparks && state.sparks[s.t];
-  if (enc) {
-    s.spark = [];
-    for (let i = 0; i < enc.length; i += 2) s.spark.push(parseInt(enc.substr(i, 2), 36));
-    return s.spark;
-  }
-  if (!state.sparks && !state.sparksLoading) {
-    state.sparksLoading = true;
-    fetch("sparks.json?t=" + Date.now(), { signal: AbortSignal.timeout(15000) })
-      .then(r => r.ok ? r.json() : { s: {} }).catch(() => ({ s: {} }))
-      .then(j => { state.sparks = j.s || {}; state.sparksLoading = false; if (state.open) renderTable(); });
-  }
-  return null;
+  const vals = chartValues(s.sector, s.t, () => { if (state.open) renderTable(); });
+  if (vals) s.spark = vals.slice(-90);
+  return vals && vals.length ? s.spark : vals;   // null = still loading, [] = no chart
 }
 
 const secName = t => SECTOR_NAMES[t] || (t === "OTHER" ? "Other" : t);
@@ -790,7 +766,7 @@ function renderTable() {
     const sp = stopAndSize(s);
     const posValue = sp ? sp.shares * s.price : 0;
     return main + `<tr class="detail"><td colspan="17"><div class="detail-grid">
-      <div>${sparkSvg(sparkFor(s)) || '<div class="mut" style="height:60px;font-size:11px">Loading chart…</div>'}<div class="mut" style="font-size:11px;margin-top:2px">90 trading days, adjusted close + 20d SMA${session() === "pre" ? ' — <span style="color:var(--amber)">regular sessions only, PRE price not in this chart</span>' : ""}</div></div>
+      <div>${(v => v ? sparkSvg(v) : '<div class="mut" style="height:60px;font-size:11px">' + (v === null ? "Loading chart…" : "") + "</div>")(sparkFor(s))}<div class="mut" style="font-size:11px;margin-top:2px">90 trading days, adjusted close + 20d SMA${session() === "pre" ? ' — <span style="color:var(--amber)">regular sessions only, PRE price not in this chart</span>' : ""}</div></div>
       <div style="display:flex;gap:28px;flex-wrap:wrap">
         <dl>
           ${state.pre[s.t] ? `<dt>Pre-market</dt><dd>${preHtml(s)}</dd>` : ""}

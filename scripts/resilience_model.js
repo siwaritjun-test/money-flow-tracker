@@ -162,29 +162,38 @@ function resPctRank(sortedVals, v) { // same as stock_model.js pctRank (kept loc
 
 /* Score every stock 0–100, percentile-ranked WITHIN its own sector so each
    stock is only compared with its industry peers.
-   Returns { sectors: { [etf]: { t, win } }, stocks: [...] }. */
-function buildResilience(stockSeries, universe, etfSeries) {
+   opts.ext = { universe, series } adds the extended universe (US stocks outside
+   the S&P 500 / Nasdaq-100): those are ranked against the sector's index
+   members, so adding them never moves an index member's score.
+   Returns { sectors: { [etf]: { t, win, n } }, stocks: [...] }. */
+function buildResilience(stockSeries, universe, etfSeries, opts = {}) {
   const sectors = {}, stocks = [];
-  for (const [sec, list] of Object.entries(universe)) {
+  const ext = opts.ext || { universe: {}, series: {} };
+  for (const sec of new Set([...Object.keys(universe), ...Object.keys(ext.universe)])) {
     const secRows = etfSeries[sec];
     const win = stressWindow(secRows);
     if (!win) continue;
     sectors[sec] = { t: sec, win };
-    const peers = [];
-    for (const { t, n, ndx, sp } of list) {
-      const rows = stockSeries[t];
-      const m = resilienceMetrics(rows, secRows, win);
-      if (!m) continue;
-      Object.assign(m, { t, n, sector: sec, ndx: !!ndx, sp: sp !== false, price: rows[rows.length - 1].close, lastTs: rows[rows.length - 1].ts });
-      m.quad = resQuadrant(m);
-      m.spark = rows.slice(-252).map(px);
-      peers.push(m);
-    }
+    const measure = (list, series, isExt) => {
+      const out = [];
+      for (const { t, n, ndx, sp } of list || []) {
+        const rows = series[t];
+        const m = resilienceMetrics(rows, secRows, win);
+        if (!m) continue;
+        Object.assign(m, { t, n, sector: sec, ndx: !!ndx, sp: !isExt && sp !== false, ext: isExt, price: rows[rows.length - 1].close, lastTs: rows[rows.length - 1].ts });
+        m.quad = resQuadrant(m);
+        m.spark = rows.slice(-252).map(px);
+        out.push(m);
+      }
+      return out;
+    };
+    const peers = measure(universe[sec], stockSeries, false);
+    const extra = measure(ext.universe[sec], ext.series, true);
     const sorted = {};
     for (const d of ["downCap", "relDD", "alpha21", "rsHigh", "udVol", "bounce"]) sorted[d] = peers.map(s => s[d]).filter(v => v != null).sort((a, b) => a - b);
     const lowBetter = (d, v) => v == null ? 0.5 : 1 - resPctRank(sorted[d], v) + 1 / (sorted[d].length || 1);
     const w = RES_WEIGHTS;
-    for (const s of peers) {
+    for (const s of peers.concat(extra)) {
       s.score = 100 * Math.min(1, Math.max(0,
         w.downCap * lowBetter("downCap", s.downCap) +
         w.relDD * lowBetter("relDD", s.relDD) +
@@ -201,6 +210,24 @@ function buildResilience(stockSeries, universe, etfSeries) {
   return { sectors, stocks };
 }
 
+/* resilience.json (written by scripts/build_screen.js) → the same shape
+   buildResilience returns, so the page never needs the raw bars. */
+const RES_QUADS = ["Leader", "Defensive", "High beta", "Fragile"];
+function decodeResilience(j) {
+  const c = Object.fromEntries(j.cols.map((k, i) => [k, i]));
+  const stocks = j.rows.map(r => {
+    const ix = r[c.ix], m = {};
+    for (const k of ["t", "n", "sector", "price", "score", "peerN", "downCap", "upCap", "alpha21", "beta", "stockDD", "secDD", "relDD",
+      "winRet", "secWinRet", "udVol", "rsHigh", "bounce", "recoverDays"]) m[k] = r[c[k]];
+    m.lastTs = r[c.lastTs] * 1000;
+    m.relRet = m.winRet - m.secWinRet;
+    m.quad = r[c.quad] == null ? null : RES_QUADS[r[c.quad]];
+    m.sp = !!(ix & 1); m.ndx = !!(ix & 2); m.ext = !!(ix & 4); m.rsLead = !!(ix & 8);
+    return m;
+  });
+  return { sectors: j.sectors, stocks };
+}
+
 /* Market backdrop: SPY's distance from its high and from its 200-day average. */
 function marketBear(spyRows) {
   if (!spyRows || spyRows.length < 30) return null;
@@ -214,5 +241,5 @@ function marketBear(spyRows) {
 }
 
 if (typeof module !== "undefined") {
-  module.exports = { BEAR_DD, MILD_DD, RES_WEIGHTS, alignPair, maxDrawdown, stressWindow, ols, resilienceMetrics, resQuadrant, buildResilience, marketBear };
+  module.exports = { BEAR_DD, MILD_DD, RES_WEIGHTS, alignPair, maxDrawdown, stressWindow, ols, resilienceMetrics, resQuadrant, buildResilience, decodeResilience, RES_QUADS, marketBear };
 }

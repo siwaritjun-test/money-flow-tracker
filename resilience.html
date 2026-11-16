@@ -136,6 +136,11 @@
 
 <div class="controls">
   <input id="search" type="search" placeholder="Search ticker or company…" autocomplete="off" spellcheck="false">
+  <span class="label">Universe</span>
+  <div class="seg" id="scope-seg">
+    <button data-s="all" title="S&P 500 + Nasdaq-100 plus every other US-listed common stock with a market cap of $1B or more">All US &ge; $1B</button>
+    <button data-s="core" title="Only S&P 500 and Nasdaq-100 members">S&amp;P 500 + Nasdaq-100</button>
+  </div>
   <span class="label">Sectors</span>
   <div class="seg" id="filter-seg">
     <button data-f="stressed" class="active" title="Sectors now in a bear (≥10% below their 1-year high) or a pullback (≥5% below)">Under stress</button>
@@ -182,7 +187,7 @@
 
     <div class="card">
       <h2 id="table-title">Resilience Screener</h2>
-      <div class="hint">Resilience score (0–100, ranked <b>within each sector</b>) = downside capture 25% · relative drawdown 20% · sector-adjusted alpha 20% · RS line vs its 1-year high 15% · up/down volume 10% · bounce since the sector's low 10%. Click a column to sort, a row for the chart. <span class="flag">RS-LEAD</span> = relative-strength line at a 1-year high while its sector is still ≥5% below its own high — the classic early sign of a new leader.</div>
+      <div class="hint">Resilience score (0–100, ranked <b>within each sector</b>) = downside capture 25% · relative drawdown 20% · sector-adjusted alpha 20% · RS line vs its 1-year high 15% · up/down volume 10% · bounce since the sector's low 10%. Click a column to sort, a row for the chart. Stocks outside the S&amp;P 500 / Nasdaq-100 (every other US stock of $1B or more) are ranked against their sector's index members, so they do not move an index member's score. <span class="flag">RS-LEAD</span> = relative-strength line at a 1-year high while its sector is still ≥5% below its own high — the classic early sign of a new leader.</div>
       <div class="table-wrap">
       <table id="screener">
         <thead><tr>
@@ -225,8 +230,12 @@
 <script src="scripts/forward_model.js"></script>
 <script src="scripts/forward_store.js"></script>
 <script>
-const state = { etf: {}, stocks: {}, universe: STOCK_UNIVERSE, filter: "stressed", quad: "", sector: null, search: "", sortK: "score", sortDir: -1, open: null, updated: null };
+const state = { etf: {}, stocks: {}, universe: STOCK_UNIVERSE, filter: "stressed", quad: "", sector: null, search: "", sortK: "score", sortDir: -1, open: null, updated: null,
+  scope: localStorage.getItem("mft-scope") === "core" ? "core" : "all",
+  fwd: {}, limit: 200, viewSig: "" };
+const PAGE = 200;   // table rows drawn at a time
 let res = null, momentum = null;
+const inScope = s => state.scope === "all" || !s.ext;
 
 const fmtPct = v => v == null ? "–" : (v >= 0 ? "+" : "") + (v * 100).toFixed(1) + "%";
 const fmtDD = v => v == null ? "–" : (v * 100).toFixed(1) + "%";
@@ -243,7 +252,27 @@ const QUADS = {
 };
 
 /* ================= data ================= */
+/* Preferred: resilience.json + screen.json, precomputed by the GitHub Action
+   (scripts/build_screen.js) for the whole universe — a few hundred KB instead
+   of the raw bars in stocks.json. */
+async function loadFast() {
+  const get = async f => {
+    const r = await fetch(f + "?t=" + Date.now(), { signal: AbortSignal.timeout(10000) });
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    return r.json();
+  };
+  const [d, rj, sc] = await Promise.all([loadJson("data.json"), get("resilience.json"), get("screen.json")]);
+  const fresh = j => (Date.now() - Date.parse(j.updated)) / 36e5 < 96;
+  if (!fresh(d) || !fresh(rj) || !(rj.rows && rj.rows.length > 300)) throw new Error("stale or empty resilience.json");
+  for (const [t, rows] of Object.entries(d.series)) if (rows.length > 25) state.etf[t] = rowsFromArr(rows);
+  res = decodeResilience(rj);
+  momentum = assembleModel(decodeScreen(sc), state.etf);
+  state.fwd = decodeFwd(sc);
+  state.updated = rj.coreUpdated || rj.updated;
+}
+
 async function loadAll() {
+  try { await loadFast(); return; } catch (e) { state.etf = {}; res = null; momentum = null; /* fall back to raw bars */ }
   try {
     const r = await fetch("universe.json?t=" + Date.now(), { signal: AbortSignal.timeout(8000) });
     if (r.ok) { const u = await r.json(); if (u?.sectors && u.count > 450) state.universe = u.sectors; }
@@ -262,7 +291,9 @@ function stressedSet() {
 function visibleStocks() {
   const q = state.search.toUpperCase();
   let list = res.stocks;
-  if (q) list = list.filter(s => s.t.includes(q) || s.n.toUpperCase().includes(q));
+  if (q) list = list.filter(s => s.t.includes(q) || s.n.toUpperCase().includes(q));   // search spans the whole universe
+  else list = list.filter(inScope);
+  if (q) { /* search ignores the sector filters */ }
   else if (state.sector) list = list.filter(s => s.sector === state.sector);
   else if (state.filter === "stressed") { const st = stressedSet(); list = list.filter(s => st.has(s.sector)); }
   if (state.quad) list = list.filter(s => s.quad === state.quad);
@@ -288,11 +319,12 @@ function renderSectors() {
   const list = Object.values(res.sectors).sort((a, b) => order[a.win.status] - order[b.win.status] || a.win.curDD - b.win.curDD);
   document.getElementById("sector-strip").innerHTML = list.map(s => {
     const w = s.win;
-    const lead = res.stocks.filter(x => x.sector === s.t && x.quad === "Leader").length;
+    const inSec = res.stocks.filter(x => x.sector === s.t && inScope(x));
+    const lead = inSec.filter(x => x.quad === "Leader").length;
     return `<div class="sec-card ${state.sector === s.t ? "selected" : ""}" data-sec="${s.t}">
       <div class="nm">${SECTOR_NAMES[s.t]} <span class="tk">${s.t}</span></div>
       <span class="st st-${w.status}">${w.status}</span>
-      <div class="mets">Now ${fmtDD(w.curDD)} from high<br>Window ${fmtDate(w.peakDate)} → ${w.active ? "today" : fmtDate(w.troughDate)} (${w.days}d)<br>Deepest ${fmtDD(w.depth)} · ${lead}/${s.n} leaders</div>
+      <div class="mets">Now ${fmtDD(w.curDD)} from high<br>Window ${fmtDate(w.peakDate)} → ${w.active ? "today" : fmtDate(w.troughDate)} (${w.days}d)<br>Deepest ${fmtDD(w.depth)} · ${lead}/${inSec.length} leaders</div>
     </div>`;
   }).join("");
   document.querySelectorAll(".sec-card").forEach(el => el.addEventListener("click", () => {
@@ -369,8 +401,29 @@ function renderLeaders(list) {
 
 /* ---------- detail charts ---------- */
 /* Stock and sector, both indexed to 100 a year ago, with the stress window shaded. */
+/* Stock/sector bar pairs for the last year. With raw bars loaded they are
+   matched by date; otherwise the stock's line comes from its sector's chart
+   file and is laid over the sector's bars ending on the stock's last day.
+   null = chart file still loading (the table redraws when it arrives). */
+function chartPairs(s) {
+  if (state.stocks[s.t]) return alignPair(state.stocks[s.t], state.etf[s.sector]).slice(-252);
+  const vals = chartValues(s.sector, s.t, () => { if (state.open) renderTable(); });
+  if (!vals) return null;
+  const B = state.etf[s.sector] || [], lastDay = resDay(s.lastTs);
+  let j = B.length - 1;
+  while (j > 0 && resDay(B[j].ts) > lastDay) j--;
+  const out = [];
+  for (let k = 0; k < vals.length; k++) {
+    const b = B[j - (vals.length - 1 - k)];
+    if (b) out.push({ s: { ts: b.ts, adj: vals[k] }, b });
+  }
+  return out;
+}
+
 function priceChart(s) {
-  const pairs = alignPair(state.stocks[s.t], state.etf[s.sector]).slice(-252);
+  const pairs = chartPairs(s);
+  if (!pairs) return null;
+  if (pairs.length < 2) return { html: '<div class="mut" style="font-size:12px">No chart for this stock.</div>', none: true };
   const w = res.sectors[s.sector].win;
   const S = pairs.map(p => p.s.adj), B = pairs.map(p => p.b.adj);
   const sI = S.map(v => 100 * v / S[0]), bI = B.map(v => 100 * v / B[0]);
@@ -444,7 +497,8 @@ function startForward(t) {
 function forwardControl(t) {
   const pos = ForwardStore.openFor(t);
   if (!pos) return `<button class="ft-btn" data-ft="${t}" title="Track this pick from today's price until you stop it">&#9654; Start forward test</button>`;
-  const perf = state.stocks[t] ? positionPerf(pos, state.stocks[t], state.etf.SPY) : null;
+  const rows = state.stocks[t] || state.fwd[t];
+  const perf = rows ? positionPerf(pos, rows, state.etf.SPY) : null;
   return `<span class="ft-on">&#9679; Forward testing since ${pos.entryDate} at $${fmtPx(pos.entryPrice)}${perf ? ` <b class="${cls(perf.ret)}">${fmtPct(perf.ret)}</b>` : ""} <a href="forward.html">View →</a></span>`;
 }
 
@@ -470,10 +524,18 @@ function renderTable() {
   document.getElementById("table-title").textContent = `Resilience Screener — ${state.search ? `search “${state.search}”` : state.sector ? SECTOR_NAMES[state.sector] : state.filter === "stressed" ? "sectors under stress" : "all sectors"}${state.quad ? " · " + state.quad : ""} (${list.length})`;
   const tb = document.getElementById("tbody");
   if (!list.length) { tb.innerHTML = '<tr><td colspan="17" class="l mut">No stocks match.</td></tr>'; return; }
-  tb.innerHTML = list.map(s => {
+  // ~2,000 stocks: draw a page at a time (a changed filter starts over at one page)
+  const viewSig = [state.search, state.filter, state.quad, state.scope, state.sector].join("|");
+  if (viewSig !== state.viewSig) { state.viewSig = viewSig; state.limit = PAGE; }
+  const openIdx = state.open ? list.findIndex(s => s.t === state.open) : -1;
+  const shown = list.slice(0, Math.max(state.limit, openIdx + 1));
+  const moreRow = list.length > shown.length ? `<tr><td colspan="17" class="l"><span class="mut">Showing ${shown.length} of ${list.length}.</span>
+    <button class="ft-btn" id="more-rows" style="margin-left:10px">Show ${Math.min(PAGE, list.length - shown.length)} more</button>
+    <button class="ft-btn" id="all-rows" style="margin-left:6px">Show all ${list.length}</button></td></tr>` : "";
+  tb.innerHTML = shown.map(s => {
     const w = res.sectors[s.sector].win;
     let html = `<tr class="stock-row" data-t="${s.t}">
-      <td class="l tk-cell">${s.t}${s.sp ? "" : '<span class="ix-tag">NDX</span>'}${s.rsLead ? '<span class="flag">RS-LEAD</span>' : ""}<span class="mut" style="font-weight:400"> ${esc(s.n)}</span></td>
+      <td class="l tk-cell">${s.t}${s.ndx && !s.sp ? '<span class="ix-tag">NDX</span>' : ""}${s.rsLead ? '<span class="flag">RS-LEAD</span>' : ""}<span class="mut" style="font-weight:400"> ${esc(s.n)}</span></td>
       <td class="l mut">${s.sector}</td>
       <td><span class="scorebar">${s.score.toFixed(0)}<span class="bb"><span class="bf" style="width:${s.score}%"></span></span></span></td>
       <td class="l"><span class="qtag ${QUADS[s.quad].tag}">${s.quad}</span></td>
@@ -498,7 +560,7 @@ function renderTable() {
           <dl>
             <dt>Sector</dt><dd>${SECTOR_NAMES[s.sector]} (${s.sector})</dd>
             <dt>Stress window</dt><dd>${fmtDate(w.peakDate)} → ${w.active ? "today" : fmtDate(w.troughDate)}</dd>
-            <dt>Resilience score</dt><dd><b>${s.score.toFixed(0)}</b> (rank ${res.stocks.filter(x => x.sector === s.sector && x.score > s.score).length + 1} of ${s.peerN})</dd>
+            <dt>Resilience score</dt><dd><b>${s.score.toFixed(0)}</b> (${s.ext ? "would rank" : "rank"} ${res.stocks.filter(x => x.sector === s.sector && !x.ext && x.score > s.score).length + 1} of ${s.peerN} index members)</dd>
             <dt>Type</dt><dd>${s.quad}</dd>
             <dt>Return in window</dt><dd class="${cls(s.winRet)}">${fmtPct(s.winRet)} vs ${fmtPct(s.secWinRet)}</dd>
             <dt>Max drawdown</dt><dd>${fmtDD(s.stockDD)} vs ${fmtDD(s.secDD)}</dd>
@@ -516,7 +578,9 @@ function renderTable() {
       </div></td></tr>`;
     }
     return html;
-  }).join("");
+  }).join("") + moreRow;
+  document.getElementById("more-rows")?.addEventListener("click", () => { state.limit = shown.length + PAGE; renderTable(); });
+  document.getElementById("all-rows")?.addEventListener("click", () => { state.limit = list.length; renderTable(); });
   tb.querySelectorAll("tr.stock-row").forEach(tr => tr.addEventListener("click", () => {
     state.open = state.open === tr.dataset.t ? null : tr.dataset.t;
     renderTable();
@@ -526,8 +590,8 @@ function renderTable() {
   if (wrap) {
     const s = res.stocks.find(x => x.t === state.open);
     const c = priceChart(s);
-    wrap.innerHTML = c.html;
-    wireCrosshair(wrap, c, s);
+    wrap.innerHTML = c ? c.html : '<div class="mut" style="font-size:12px">Loading chart…</div>';
+    if (c && !c.none) wireCrosshair(wrap, c, s);
   }
   tb.querySelectorAll("[data-ft]").forEach(b => b.addEventListener("click", e => { e.stopPropagation(); startForward(b.dataset.ft); }));
 }
@@ -550,6 +614,14 @@ document.getElementById("filter-seg").addEventListener("click", e => {
   state.filter = e.target.dataset.f; state.sector = null; state.open = null;
   syncSegs(); renderSectors(); renderView();
 });
+document.querySelectorAll("#scope-seg button").forEach(b => b.classList.toggle("active", b.dataset.s === state.scope));
+document.getElementById("scope-seg").addEventListener("click", e => {
+  if (!e.target.dataset.s) return;
+  state.scope = e.target.dataset.s; state.open = null;
+  localStorage.setItem("mft-scope", state.scope);
+  document.querySelectorAll("#scope-seg button").forEach(b => b.classList.toggle("active", b === e.target));
+  renderSectors(); renderView();
+});
 document.getElementById("quad-seg").addEventListener("click", e => {
   if (e.target.dataset.q == null) return;
   state.quad = e.target.dataset.q; state.open = null;
@@ -567,13 +639,15 @@ document.querySelectorAll("#screener th").forEach(th => th.addEventListener("cli
 (async function init() {
   const badge = document.getElementById("status");
   try { await loadAll(); } catch (e) { /* handled below */ }
-  res = buildResilience(state.stocks, state.universe, state.etf);
-  momentum = buildModel(state.stocks, state.universe, state.etf);
+  if (!res) {
+    res = buildResilience(state.stocks, state.universe, state.etf);
+    momentum = buildModel(state.stocks, state.universe, state.etf);
+  }
   document.getElementById("loading").style.display = "none";
   if (!res.stocks.length || !state.etf.SPY) {
     badge.textContent = "● no data"; badge.className = "badge sample";
     document.getElementById("loading").style.display = "flex";
-    document.getElementById("loading").innerHTML = "Could not load data.json / stocks.json. Open this page from the GitHub Pages site or the local dev server (node scripts/dev_server.js).";
+    document.getElementById("loading").innerHTML = "Could not load data.json / resilience.json. Open this page from the GitHub Pages site or the local dev server (node scripts/dev_server.js).";
     return;
   }
   badge.textContent = `● live · ${res.stocks.length} stocks`; badge.className = "badge live";

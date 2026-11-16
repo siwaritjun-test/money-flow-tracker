@@ -299,6 +299,34 @@ function assembleModel(stocks, etfSeries) {
   return { stocks, sectors, secList, breadth };
 }
 
+/* screen.json (written by scripts/build_screen.js) → described per-stock
+   metrics, ready for assembleModel. */
+function decodeScreen(sc) {
+  const c = Object.fromEntries(sc.cols.map((k, i) => [k, i]));
+  return sc.rows.map(r => {
+    const ix = r[c.ix], tr = r[c.trend];
+    return describeStock({
+      price: r[c.price], lastTs: r[c.lastTs] * 1000, chg1d: r[c.chg1d], ret5: r[c.ret5], ret21: r[c.ret21], ret63: r[c.ret63],
+      mfi: r[c.mfi], obvT: r[c.obvT], flow21: r[c.flow21], atr: r[c.atr], volX: r[c.volX], prox52: r[c.prox52],
+      aboveS20: !!(tr & 1), aboveS50: !!(tr & 2), avgDollarVol: r[c.avgDollarVol] || null, unusualVol: r[c.unusualVol],
+    }, r[c.sector], { t: r[c.t], n: r[c.n], ind: r[c.ind], mc: r[c.mc], ndx: !!(ix & 2), sp: !!(ix & 1) }, !!(ix & 4));
+  });
+}
+/* screen.json's slim bars for open forward tests → row objects by ticker. */
+function decodeFwd(sc) {
+  const out = {};
+  for (const [t, rows] of Object.entries(sc.fwd || {})) {
+    out[t] = rows.map(([ts, close, adj, low]) => ({ ts, close, vol: 0, adj: adj > 0 ? adj : close, high: close, low: low > 0 ? low : close }));
+  }
+  return out;
+}
+/* charts/<sector>.json entry [min, max, "two base-36 chars per point"] → prices. */
+function decodeChart(e) {
+  const [min, max, enc] = e, out = [];
+  for (let i = 0; i < enc.length; i += 2) out.push(min + parseInt(enc.substr(i, 2), 36) / 1295 * (max - min));
+  return out;
+}
+
 /* Build the full model from raw bars. opts.ext = { universe, series } adds the
    extended universe (same sector → list shape as `universe`). */
 function buildModel(stockSeries, universe, etfSeries, opts = {}) {
@@ -317,5 +345,5 @@ function buildModel(stockSeries, universe, etfSeries, opts = {}) {
 }
 
 if (typeof module !== "undefined") {
-  module.exports = { smaLast, nRet, mfi, obvTrend, dollarFlow, atr, volSurge, stockMetrics, rrgPoint, sectorFlows, pctRank, buildSectors, describeStock, assembleModel, buildModel, SCORE_WEIGHTS, marketSession, parsePreFromChart, CAP_TIERS, capTier };
+  module.exports = { smaLast, nRet, mfi, obvTrend, dollarFlow, atr, volSurge, stockMetrics, rrgPoint, sectorFlows, pctRank, buildSectors, describeStock, assembleModel, buildModel, decodeScreen, decodeFwd, decodeChart, SCORE_WEIGHTS, marketSession, parsePreFromChart, CAP_TIERS, capTier };
 }

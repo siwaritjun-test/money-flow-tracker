@@ -45,3 +45,20 @@ async function fetchTickerLive(t, withHL) {
   }
   return null;
 }
+
+/* Year-long price lines for the detail charts, one file per sector
+   (charts/XLK.json …), fetched the first time a stock of that sector is opened.
+   chartValues(sector, ticker, onReady) → prices, or null while loading (onReady
+   fires once the file has arrived), or [] when the stock has no chart. */
+const chartFiles = {};
+function chartValues(sector, t, onReady) {
+  const f = chartFiles[sector];
+  if (f && f.data) return f.data[t] ? (f.cache[t] = f.cache[t] || decodeChart(f.data[t])) : [];
+  if (!f) {
+    chartFiles[sector] = { data: null, cache: {} };
+    fetch("charts/" + encodeURIComponent(sector) + ".json?t=" + Date.now(), { signal: AbortSignal.timeout(15000) })
+      .then(r => r.ok ? r.json() : {}).catch(() => ({}))
+      .then(j => { chartFiles[sector].data = j; if (onReady) onReady(); });
+  }
+  return null;
+}
