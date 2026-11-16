@@ -5,7 +5,12 @@ on:
     # every 2 hours on weekdays (covers US market hours), once on Saturday for crypto
     - cron: "17 */2 * * 1-5"
     - cron: "17 12 * * 6"
-  workflow_dispatch: {}   # allows manual "Run workflow" button
+  workflow_dispatch:      # allows manual "Run workflow" button
+    inputs:
+      force_screen:
+        description: "Rebuild screen.json (extended universe) even if it is current"
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -31,7 +36,7 @@ jobs:
         run: node scripts/fetch_data.js
 
       - name: Build the Stock Picker screen (extended universe; self-skips unless stocks.json changed)
-        run: node scripts/build_screen.js
+        run: node scripts/build_screen.js ${{ inputs.force_screen && '--force' || '' }}
 
       - name: Social listening (self-skips unless ~12h old)
         run: node scripts/fetch_social.js
