@@ -51,6 +51,30 @@ if (Object.values(universe).flat().some(s => s.mc)) {
   check(nv && nv.cap === "mega", `NVDA is mega cap ($${nv && (nv.mc / 1e6).toFixed(2)}T)`);
 }
 
+// screen.json (what stocks.html loads): decoding it and scoring the browser's
+// way must reproduce the raw-bar model for index members, and extended stocks
+// must not move those scores.
+try {
+  const sc = JSON.parse(fs.readFileSync(path.join(ROOT, "screen.json"), "utf8"));
+  const { assembleModel, describeStock } = require("./stock_model");
+  const c = Object.fromEntries(sc.cols.map((k, i) => [k, i]));
+  const dec = sc.rows.map(r => describeStock({
+    price: r[c.price], lastTs: r[c.lastTs] * 1000, chg1d: r[c.chg1d], ret5: r[c.ret5], ret21: r[c.ret21], ret63: r[c.ret63],
+    mfi: r[c.mfi], obvT: r[c.obvT], flow21: r[c.flow21], atr: r[c.atr], volX: r[c.volX], prox52: r[c.prox52],
+    aboveS20: !!(r[c.trend] & 1), aboveS50: !!(r[c.trend] & 2), avgDollarVol: r[c.avgDollarVol], unusualVol: r[c.unusualVol],
+  }, r[c.sector], { t: r[c.t], n: r[c.n], ind: r[c.ind], mc: r[c.mc], ndx: !!(r[c.ix] & 2), sp: !!(r[c.ix] & 1) }, !!(r[c.ix] & 4)));
+  const sm = assembleModel(dec, etf);
+  const ext = sm.stocks.filter(s => s.ext);
+  check(ext.length > 500, `screen.json carries ${ext.length} extended stocks`);
+  check(sm.breadth.n === sm.stocks.length - ext.length, "breadth counts index members only");
+  check(sm.stocks.every(s => s.score >= 0 && s.score <= 100), "screen scores within 0–100");
+  if (sc.coreUpdated === stk.updated) {
+    const byT = new Map(model.stocks.map(s => [s.t, s.score]));
+    const diffs = sm.stocks.filter(s => !s.ext && byT.has(s.t)).map(s => Math.abs(s.score - byT.get(s.t)));
+    check(diffs.length >= model.stocks.length * 0.95 && Math.max(...diffs) < 0.5, `screen scores match the raw-bar model for ${diffs.length} index stocks (max diff ${Math.max(...diffs).toFixed(3)})`);
+  }
+} catch (e) { if (e.code !== "ENOENT") throw e; console.log("SKIP  screen.json checks (file not present)"); }
+
 // scores must actually discriminate
 const scores = model.stocks.map(s => s.score);
 check(Math.max(...scores) - Math.min(...scores) > 30, `score spread ${(Math.max(...scores) - Math.min(...scores)).toFixed(0)} > 30`);

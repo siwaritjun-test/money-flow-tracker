@@ -36,20 +36,20 @@ const puppeteer = require("puppeteer-core");
 
   // 4) unknown ticker -> live-fetch button appears
   await page.$eval("#search", el => el.value = "");
-  await page.type("#search", "RIVN"); // Rivian: US-listed but not in the S&P 500
+  await page.type("#search", "TSM"); // Rivian: US-listed but not in the S&P 500
   await new Promise(r => setTimeout(r, 300));
   const btn = await page.$("#fetch-live");
-  btn ? pass("unknown ticker RIVN -> fetch-live button shown") : fail("no fetch-live button for RIVN");
+  btn ? pass("unknown ticker TSM -> fetch-live button shown") : fail("no fetch-live button for TSM");
 
   // 5) click it -> live fetch from Yahoo, row appears scored
   if (btn) {
     await btn.click();
     try {
-      await page.waitForSelector('#tbody tr.stock-row[data-t="RIVN"]', { timeout: 30000 });
-      const cells = await page.$eval('#tbody tr.stock-row[data-t="RIVN"]', tr => tr.innerText.replace(/\s+/g, " "));
-      pass("RIVN fetched live and scored: " + cells.slice(0, 90));
+      await page.waitForSelector('#tbody tr.stock-row[data-t="TSM"]', { timeout: 30000 });
+      const cells = await page.$eval('#tbody tr.stock-row[data-t="TSM"]', tr => tr.innerText.replace(/\s+/g, " "));
+      pass("TSM fetched live and scored: " + cells.slice(0, 90));
     } catch (e) {
-      fail("RIVN row did not appear after live fetch (network?): " + e.message);
+      fail("TSM row did not appear after live fetch (network?): " + e.message);
     }
   }
 

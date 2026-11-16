@@ -230,7 +230,21 @@ async function loadData() {
 
   // Picks from outside the S&P 500 were fetched live on the Stock Picker; do the same here.
   const wanted = ForwardStore.all().map(p => p.t).concat(ForwardStore.rules().flatMap(r => r.members.map(m => m.t)));
-  const missing = [...new Set(wanted)].filter(t => !state.stocks[t]);
+  let missing = [...new Set(wanted)].filter(t => !state.stocks[t]);
+  // A pick from the extended universe gets its own bars in stocks.json at the next
+  // data refresh; until then, measure it from the latest price in screen.json.
+  if (missing.length) {
+    try {
+      const sc = await (await fetch("screen.json?t=" + Date.now(), { signal: AbortSignal.timeout(10000) })).json();
+      const c = Object.fromEntries(sc.cols.map((k, i) => [k, i]));
+      for (const r of sc.rows) {
+        if (!missing.includes(r[c.t])) continue;
+        const px = r[c.price];
+        state.stocks[r[c.t]] = [{ ts: r[c.lastTs] * 1000, close: px, vol: 0, adj: px, high: px, low: px }];
+      }
+      missing = missing.filter(t => !state.stocks[t]);
+    } catch (e) { /* fall through to the live fetch */ }
+  }
   let done = 0;
   await Promise.all(missing.map(async t => {
     const rows = await fetchTickerLive(t, true);

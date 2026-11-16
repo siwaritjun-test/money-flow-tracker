@@ -171,12 +171,18 @@
     <button data-f="ndx" title="Nasdaq-100 members, including the ones outside the S&P 500">Nasdaq-100</button>
     <button data-f="watch" title="Your starred stocks (saved in this browser)">&#9733; Watchlist</button>
   </div>
+  <span class="label">Universe</span>
+  <div class="seg" id="scope-seg">
+    <button data-s="all" title="S&P 500 + Nasdaq-100 plus every other US-listed common stock with a market cap of $1B or more">All US &ge; $1B</button>
+    <button data-s="core" title="Only S&P 500 and Nasdaq-100 members">S&amp;P 500 + Nasdaq-100</button>
+  </div>
   <span class="label">Cap</span>
   <div class="seg" id="cap-seg">
     <button data-c="" class="active" title="Every market-cap size">All</button>
     <button data-c="mega" title="Mega cap: $200B and above">Mega</button>
     <button data-c="large" title="Large cap: $10B – $200B">Large</button>
     <button data-c="mid" title="Mid cap: $2B – $10B">Mid</button>
+    <button data-c="small" title="Small cap: under $2B (the universe starts at $1B)">Small</button>
   </div>
   <span class="label">Risk</span>
   <div class="risk-inputs" title="Used for the stop-loss / position-size suggestion in each stock's detail row (click a row).">
@@ -227,7 +233,7 @@
 
     <div class="card">
       <h2 id="table-title">Momentum Screener</h2>
-      <div class="hint">Composite score = relative strength vs own sector (1m 15% + 3m 20%) &middot; MFI-14 (12.5%) &middot; OBV money-flow trend (12.5%) &middot; distance to 52w high (15%) &middot; volume surge (10%) &middot; above 20/50-day SMA (15%). Cross-sectional metrics are percentile-ranked across the universe. Click a column to sort, a row for stop-loss &amp; position-size detail. Mkt Cap tiers: Mega &ge; $200B &middot; Large $10B&ndash;$200B &middot; Mid $2B&ndash;$10B &middot; Small &lt; $2B (not part of the score). Flags: <span class="flag f-acc">ACC</span> accumulation divergence (price down, OBV up) &middot; <span class="flag f-dist">DIST</span> distribution (price up, OBV down) &middot; <span class="flag f-vol">VOL</span> unusual volume today (&ge;2&times; normal) &middot; <span class="flag f-hi">HI</span> within 2% of 52-week high.</div>
+      <div class="hint">Composite score = relative strength vs own sector (1m 15% + 3m 20%) &middot; MFI-14 (12.5%) &middot; OBV money-flow trend (12.5%) &middot; distance to 52w high (15%) &middot; volume surge (10%) &middot; above 20/50-day SMA (15%). Cross-sectional metrics are percentile-ranked across the universe. Click a column to sort, a row for stop-loss &amp; position-size detail. Mkt Cap tiers: Mega &ge; $200B &middot; Large $10B&ndash;$200B &middot; Mid $2B&ndash;$10B &middot; Small &lt; $2B (not part of the score). Stocks outside the S&amp;P 500 / Nasdaq-100 are scored against the index members' percentiles, so adding them does not move an index member's score. Flags: <span class="flag f-acc">ACC</span> accumulation divergence (price down, OBV up) &middot; <span class="flag f-dist">DIST</span> distribution (price up, OBV down) &middot; <span class="flag f-vol">VOL</span> unusual volume today (&ge;2&times; normal) &middot; <span class="flag f-hi">HI</span> within 2% of 52-week high.</div>
       <div class="table-wrap">
       <table id="screener">
         <thead><tr>
@@ -258,7 +264,7 @@
 </main>
 
 <footer>
-  <strong>Method.</strong> Universe: the full S&amp;P 500 plus the Nasdaq-100, auto-refreshed from the public constituent lists by the data pipeline (universe.json; Nasdaq-100 names outside the S&amp;P 500 are tagged NDX and placed in a sector by their ICB industry); any other US ticker can be pulled in live through the search box and scored against the same percentiles. The momentum playbook implemented here: (1) the regime bar says whether risk-taking is being rewarded at all; (2) sector money flow + RRG quadrant pick <em>where</em> to fish; (3) the composite score picks the strongest fish — relative strength vs its own sector, money-flow indicators (MFI, OBV trend, signed dollar volume), proximity to 52-week highs, volume confirmation and trend filters. Stops are suggested at 2&times;ATR(14) below price, with position size = (account &times; risk%) &divide; stop distance. Returns use dividend/split-adjusted closes. Data: Yahoo Finance daily bars via the repo's GitHub Action. Estimates, not actual fund flows; educational tool, not investment advice.
+  <strong>Method.</strong> Universe: the full S&amp;P 500 plus the Nasdaq-100, auto-refreshed from the public constituent lists by the data pipeline (universe.json; Nasdaq-100 names outside the S&amp;P 500 are tagged NDX and placed in a sector by their ICB industry), plus every other US-listed common stock with a market cap of $1B or more (from Nasdaq's public screener, placed in a sector by Nasdaq's own sector label, which does not always match GICS). Market breadth and the score percentiles use the index members only. Any other ticker can be pulled in live through the search box and scored against the same percentiles. The momentum playbook implemented here: (1) the regime bar says whether risk-taking is being rewarded at all; (2) sector money flow + RRG quadrant pick <em>where</em> to fish; (3) the composite score picks the strongest fish — relative strength vs its own sector, money-flow indicators (MFI, OBV trend, signed dollar volume), proximity to 52-week highs, volume confirmation and trend filters. Stops are suggested at 2&times;ATR(14) below price, with position size = (account &times; risk%) &divide; stop distance. Returns use dividend/split-adjusted closes. Data: Yahoo Finance daily bars via the repo's GitHub Action. Estimates, not actual fund flows; educational tool, not investment advice.
 </footer>
 
 <div id="tooltip"></div>
@@ -272,7 +278,13 @@
 /* ================= data layer ================= */
 const ETF_NEEDED = ["SPY", ...Object.keys(STOCK_UNIVERSE),
   "^VIX", "^TNX", "^IRX", "GC=F", "HG=F", "XLY", "XLP", "SPHB", "SPLV", "RSP", "SMH", "IWM", "HYG", "LQD"];
-const state = { etf: {}, stocks: {}, universe: STOCK_UNIVERSE, filter: "leaders", cap: "", sector: null, search: "", sortK: "score", sortDir: -1, open: null, source: null, updated: null };
+const state = { etf: {}, stocks: {}, universe: STOCK_UNIVERSE, filter: "leaders", cap: "", sector: null, search: "", sortK: "score", sortDir: -1, open: null, source: null, updated: null,
+  scope: localStorage.getItem("mft-scope") === "core" ? "core" : "all",
+  metrics: null,   // per-stock metrics decoded from screen.json (null → built from raw bars instead)
+  fwd: {},         // slim bars for open forward tests, from screen.json
+  sparks: null, sparksLoading: false,
+  limit: 200, viewSig: "" };
+const PAGE = 200;   // rows drawn at a time
 
 async function fetchSetLive(tickers, target, withHL, label) {
   let done = 0, ok = 0, idx = 0;
@@ -301,9 +313,41 @@ async function loadUniverse() {
   } catch (e) { /* keep built-in fallback */ }
 }
 
+/* screen.json = every stock's metrics, precomputed by the GitHub Action
+   (scripts/build_screen.js) — ~120 KB over the wire instead of the multi-MB
+   raw bars in stocks.json. */
+function decodeScreen(sc) {
+  const c = Object.fromEntries(sc.cols.map((k, i) => [k, i]));
+  return sc.rows.map(r => {
+    const ix = r[c.ix], tr = r[c.trend];
+    return describeStock({
+      price: r[c.price], lastTs: r[c.lastTs] * 1000, chg1d: r[c.chg1d], ret5: r[c.ret5], ret21: r[c.ret21], ret63: r[c.ret63],
+      mfi: r[c.mfi], obvT: r[c.obvT], flow21: r[c.flow21], atr: r[c.atr], volX: r[c.volX], prox52: r[c.prox52],
+      aboveS20: !!(tr & 1), aboveS50: !!(tr & 2), avgDollarVol: r[c.avgDollarVol] || null, unusualVol: r[c.unusualVol],
+    }, r[c.sector], { t: r[c.t], n: r[c.n], ind: r[c.ind], mc: r[c.mc], ndx: !!(ix & 2), sp: !!(ix & 1) }, !!(ix & 4));
+  });
+}
+async function loadScreen() {
+  const get = async f => {
+    const r = await fetch(f + "?t=" + Date.now(), { signal: AbortSignal.timeout(10000) });
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    return r.json();
+  };
+  const [d, sc] = await Promise.all([loadJson("data.json"), get("screen.json")]);
+  const fresh = j => (Date.now() - Date.parse(j.updated)) / 36e5 < 96;
+  if (!fresh(d) || !fresh(sc) || !(sc.rows && sc.rows.length > 300)) throw new Error("stale or empty screen.json");
+  for (const [t, rows] of Object.entries(d.series)) if (rows.length > 25) state.etf[t] = rowsFromArr(rows);
+  state.metrics = decodeScreen(sc);
+  for (const [t, rows] of Object.entries(sc.fwd || {})) {
+    state.fwd[t] = rows.map(([ts, close, adj, low]) => ({ ts, close, vol: 0, adj: adj > 0 ? adj : close, high: close, low: low > 0 ? low : close }));
+  }
+  state.source = "live"; state.updated = sc.coreUpdated || sc.updated;
+}
+
 async function loadAll() {
+  try { await loadScreen(); return; } catch (e) { state.etf = {}; state.metrics = null; /* fall back to raw bars */ }
   await loadUniverse();
-  // preferred: JSON files committed by the GitHub Action (same-origin, fast)
+  // fallback: raw bars committed by the GitHub Action (same-origin, but large)
   try {
     const [d, s] = await Promise.all([loadJson("data.json"), loadJson("stocks.json")]);
     const fresh = j => (Date.now() - Date.parse(j.updated)) / 36e5 < 96;
@@ -427,7 +471,12 @@ function startForward(t) {
 }
 
 function forwardPerf(pos) {
-  const rows = state.stocks[pos.t];
+  let rows = state.stocks[pos.t] || state.fwd[pos.t];
+  if (!rows) {
+    // tracked since the data was last built: measure from the price on screen
+    const s = model && model.stocks.find(x => x.t === pos.t);
+    if (s) rows = [{ ts: s.lastTs, close: s.price, vol: 0, adj: s.price, high: s.price, low: s.price }];
+  }
   return rows ? positionPerf(pos, rows, state.etf.SPY) : null;
 }
 
@@ -537,7 +586,7 @@ function stopAndSize(s) {
 
 function renderPicks() {
   const lead = leaderSectors();
-  const picks = model.stocks.filter(s => lead.has(s.sector)).slice(0, 5);
+  const picks = model.stocks.filter(s => inScope(s) && lead.has(s.sector)).slice(0, 5);
   document.getElementById("picks").innerHTML = picks.map(s => {
     const sp = stopAndSize(s);
     return `<div class="pick" data-t="${s.t}">
@@ -575,6 +624,27 @@ function sparkSvg(vals, w = 240, h = 60) {
   </svg>`;
 }
 
+const inScope = s => state.scope === "all" || !s.ext;
+
+/* Sparklines live in their own file (sparks.json), fetched the first time a
+   row is opened: two base-36 chars per point, scaled between min and max. */
+function sparkFor(s) {
+  if (s.spark) return s.spark;
+  const enc = state.sparks && state.sparks[s.t];
+  if (enc) {
+    s.spark = [];
+    for (let i = 0; i < enc.length; i += 2) s.spark.push(parseInt(enc.substr(i, 2), 36));
+    return s.spark;
+  }
+  if (!state.sparks && !state.sparksLoading) {
+    state.sparksLoading = true;
+    fetch("sparks.json?t=" + Date.now(), { signal: AbortSignal.timeout(15000) })
+      .then(r => r.ok ? r.json() : { s: {} }).catch(() => ({ s: {} }))
+      .then(j => { state.sparks = j.s || {}; state.sparksLoading = false; if (state.open) renderTable(); });
+  }
+  return null;
+}
+
 const secName = t => SECTOR_NAMES[t] || (t === "OTHER" ? "Other" : t);
 
 function visibleStocks() {
@@ -583,7 +653,9 @@ function visibleStocks() {
   if (q) {
     // search spans the whole universe regardless of the sector/watchlist filter
     list = list.filter(s => s.t.includes(q) || s.n.toUpperCase().includes(q));
-  } else if (state.sector) list = list.filter(s => s.sector === state.sector);
+  } else list = list.filter(inScope);
+  if (q) { /* search ignores the filters below */ }
+  else if (state.sector) list = list.filter(s => s.sector === state.sector);
   else if (state.filter === "leaders") { const lead = leaderSectors(); list = list.filter(s => lead.has(s.sector)); }
   else if (state.filter === "watch") list = list.filter(s => watchlist.has(s.t));
   else if (state.filter === "ndx") list = list.filter(s => s.ndx);
@@ -665,9 +737,9 @@ async function liveFetch(raw) {
     return;
   }
   state.stocks[t] = rows;
-  state.universe.OTHER = state.universe.OTHER || [];
-  if (!state.universe.OTHER.some(s => s.t === t)) state.universe.OTHER.push({ t, n: t + " (fetched live)" });
-  model = buildModel(state.stocks, state.universe, state.etf);
+  state.metrics = state.metrics.filter(s => s.t !== t);
+  state.metrics.push(describeStock(stockMetrics(rows), "OTHER", { t, n: t + " (fetched live)" }));
+  model = assembleModel(state.metrics, state.etf);
   state.search = t;
   document.getElementById("search").value = t;
   renderAll();
@@ -687,12 +759,17 @@ function renderTable() {
   document.getElementById("table-title").textContent =
     `Momentum Screener — ${state.search ? `search “${state.search}”` : state.sector ? SECTOR_NAMES[state.sector] : state.filter === "leaders" ? "leading sectors" : state.filter === "watch" ? "watchlist" : state.filter === "ndx" ? "Nasdaq-100" : "all sectors"}${state.cap && !state.search ? " · " + capLabel(state.cap).toLowerCase() + " cap" : ""} (${list.length})`;
   const tb = document.getElementById("tbody");
-  tb.innerHTML = list.map(s => {
+  // ~2,000 stocks: draw a page at a time (a changed filter starts over at one page)
+  const viewSig = [state.search, state.filter, state.cap, state.scope, state.sector].join("|");
+  if (viewSig !== state.viewSig) { state.viewSig = viewSig; state.limit = PAGE; }
+  const openIdx = state.open ? list.findIndex(s => s.t === state.open) : -1;
+  const shown = list.slice(0, Math.max(state.limit, openIdx + 1));
+  tb.innerHTML = shown.map(s => {
     const sec = model.sectors[s.sector];
     const quad = sec && sec.rrg ? sec.rrg.quad : "–";
     const main = `<tr class="stock-row" data-t="${s.t}">
       <td class="l"><span class="star ${watchlist.has(s.t) ? "on" : ""}" data-t="${s.t}">&#9733;</span></td>
-      <td class="l tk-cell">${s.t}${s.sp ? "" : '<span class="ix-tag" title="Nasdaq-100 member outside the S&amp;P 500">NDX</span>'}${ForwardStore.openFor(s.t) ? '<span class="ft-badge" title="In your forward test">FT</span>' : ""}<span class="mut" style="font-weight:400"> ${esc(s.n)}</span></td>
+      <td class="l tk-cell">${s.t}${s.ndx && !s.sp ? '<span class="ix-tag" title="Nasdaq-100 member outside the S&amp;P 500">NDX</span>' : ""}${ForwardStore.openFor(s.t) ? '<span class="ft-badge" title="In your forward test">FT</span>' : ""}<span class="mut" style="font-weight:400"> ${esc(s.n)}</span></td>
       <td class="l"><span class="sec-chip q-${quad}" title="${s.sector}">${secName(s.sector)}</span></td>
       <td class="l ind-cell" title="${esc(s.ind)}">${s.ind ? esc(s.ind) : '<span class="mut">–</span>'}</td>
       <td>${capHtml(s)}</td>
@@ -713,7 +790,7 @@ function renderTable() {
     const sp = stopAndSize(s);
     const posValue = sp ? sp.shares * s.price : 0;
     return main + `<tr class="detail"><td colspan="17"><div class="detail-grid">
-      <div>${sparkSvg(s.spark)}<div class="mut" style="font-size:11px;margin-top:2px">90 trading days, adjusted close + 20d SMA${session() === "pre" ? ' — <span style="color:var(--amber)">regular sessions only, PRE price not in this chart</span>' : ""}</div></div>
+      <div>${sparkSvg(sparkFor(s)) || '<div class="mut" style="height:60px;font-size:11px">Loading chart…</div>'}<div class="mut" style="font-size:11px;margin-top:2px">90 trading days, adjusted close + 20d SMA${session() === "pre" ? ' — <span style="color:var(--amber)">regular sessions only, PRE price not in this chart</span>' : ""}</div></div>
       <div style="display:flex;gap:28px;flex-wrap:wrap">
         <dl>
           ${state.pre[s.t] ? `<dt>Pre-market</dt><dd>${preHtml(s)}</dd>` : ""}
@@ -732,16 +809,24 @@ function renderTable() {
       </div>
     </div></td></tr>`;
   }).join("");
+  if (list.length > shown.length) {
+    const left = list.length - shown.length;
+    tb.innerHTML += `<tr><td colspan="17" class="l"><span class="mut">Showing ${shown.length} of ${list.length}.</span>
+      <button class="fetch-live-btn" id="more-rows" style="margin-left:10px">Show ${Math.min(PAGE, left)} more</button>
+      <button class="fetch-live-btn" id="all-rows" style="margin-left:6px">Show all ${list.length}</button></td></tr>`;
+  }
   // any other US ticker: offer a live Yahoo fetch when the search looks like
   // a ticker that isn't in the universe
   const q = state.search.toUpperCase().replace(/\./g, "-");
   if (state.search && TICKER_RE.test(state.search.toUpperCase()) && !model.stocks.some(s => s.t === q)) {
     tb.innerHTML += `<tr><td colspan="17" class="l">
-      <span class="mut">“${q}” is not in the S&amp;P 500 or Nasdaq-100 universe.</span>
+      <span class="mut">“${q}” is not in the universe (S&amp;P 500, Nasdaq-100, other US stocks of $1B or more).</span>
       <button class="fetch-live-btn" id="fetch-live" style="margin-left:10px">Fetch ${q} live from Yahoo &amp; score it</button>
     </td></tr>`;
     document.getElementById("fetch-live").addEventListener("click", () => liveFetch(q));
   }
+  document.getElementById("more-rows")?.addEventListener("click", () => { state.limit = shown.length + PAGE; renderTable(); });
+  document.getElementById("all-rows")?.addEventListener("click", () => { state.limit = list.length; renderTable(); });
   wireForwardButtons(tb);
   tb.querySelectorAll(".star").forEach(el => el.addEventListener("click", e => {
     e.stopPropagation();
@@ -787,6 +872,14 @@ document.getElementById("filter-seg").addEventListener("click", e => {
   document.querySelectorAll("#filter-seg button").forEach(b => b.classList.toggle("active", b === e.target));
   renderSectors(); renderTable();
 });
+document.querySelectorAll("#scope-seg button").forEach(b => b.classList.toggle("active", b.dataset.s === state.scope));
+document.getElementById("scope-seg").addEventListener("click", e => {
+  if (!e.target.dataset.s) return;
+  state.scope = e.target.dataset.s; state.open = null;
+  localStorage.setItem("mft-scope", state.scope);
+  document.querySelectorAll("#scope-seg button").forEach(b => b.classList.toggle("active", b === e.target));
+  renderPicks(); renderTable();
+});
 document.getElementById("cap-seg").addEventListener("click", e => {
   if (e.target.dataset.c == null) return;
   state.cap = e.target.dataset.c; state.open = null;
@@ -811,13 +904,14 @@ for (const id of ["acct", "riskpct"]) {
 
 (async function init() {
   await loadAll();
-  model = buildModel(state.stocks, state.universe, state.etf);
+  if (state.metrics) model = assembleModel(state.metrics, state.etf);
+  else { model = buildModel(state.stocks, state.universe, state.etf); state.metrics = model.stocks; }
   document.getElementById("loading").style.display = "none";
   const badge = document.getElementById("status");
   if (!model.stocks.length) {
     badge.textContent = "● no data"; badge.className = "badge sample";
     document.getElementById("content").style.display = "flex";
-    document.getElementById("tbody").innerHTML = '<tr><td colspan="16" class="l mut">Could not load stock data. Host this page with the GitHub Action (stocks.json), or check your connection.</td></tr>';
+    document.getElementById("tbody").innerHTML = '<tr><td colspan="17" class="l mut">Could not load stock data. Host this page with the GitHub Action (screen.json), or check your connection.</td></tr>';
     return;
   }
   badge.textContent = `● live · ${model.stocks.length} stocks`;
@@ -848,7 +942,7 @@ for (const id of ["acct", "riskpct"]) {
   if (session() === "pre") {
     document.getElementById("pre-banner").style.display = "";
     const lead = leaderSectors();
-    const picks = model.stocks.filter(s => lead.has(s.sector)).slice(0, 5).map(s => s.t);
+    const picks = model.stocks.filter(s => inScope(s) && lead.has(s.sector)).slice(0, 5).map(s => s.t);
     preTopUp(picks).then(got => { if (got) { renderPicks(); renderTable(); } });
   }
 })();

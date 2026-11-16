@@ -201,13 +201,13 @@ function capTier(mcM) {
 
 const SCORE_WEIGHTS = { rs63: 0.20, rs21: 0.15, mfi: 0.125, obvT: 0.125, prox52: 0.15, volX: 0.10, trend: 0.15 };
 
-/* Build the full model: per-stock metrics + relative strength vs own sector,
-   percentile-ranked composite score 0–100, sector status, breadth stats. */
-function buildModel(stockSeries, universe, etfSeries, opts = {}) {
+/* Sector model: momentum vs SPY, RRG quadrant, money flow and rank for every
+   sector ETF in `keys` that has data. */
+function buildSectors(keys, etfSeries) {
   const spy = etfSeries.SPY;
   const sectors = {};
   const sectorRowsByT = {};
-  for (const sec of Object.keys(universe)) {
+  for (const sec of keys) {
     const rows = etfSeries[sec];
     if (!rows) continue;
     sectorRowsByT[sec] = rows;
@@ -228,31 +228,44 @@ function buildModel(stockSeries, universe, etfSeries, opts = {}) {
   const e63 = secList.map(s => s.ex63).sort((a, b) => a - b);
   for (const s of secList) s.score = 100 * (0.5 * pctRank(e21, s.ex21) + 0.5 * pctRank(e63, s.ex63));
   secList.sort((a, b) => b.score - a.score).forEach((s, i) => s.rank = i + 1);
+  return { sectors, secList };
+}
 
-  // per-stock metrics
-  const stocks = [];
-  for (const [sec, list] of Object.entries(universe)) {
-    const secM = sectors[sec];
-    for (const { t, n, ind, ndx, sp, mc } of list) {
-      const m = stockMetrics(stockSeries[t]);
-      if (!m) continue;
-      m.t = t; m.n = n; m.sector = sec;
-      m.ind = ind || "";     // industry label (GICS Sub-Industry / ICB Subsector)
-      m.mc = mc > 0 ? mc : null; // market cap, $ millions (null when unknown, e.g. live-fetched tickers)
-      m.cap = capTier(mc);    // "mega" | "large" | "mid" | "small" | null
-      m.ndx = !!ndx;          // in the Nasdaq-100
-      m.sp = sp !== false;    // in the S&P 500 (every entry unless marked otherwise)
-      m.rs21 = (secM && secM.ret21 != null && m.ret21 != null) ? m.ret21 - secM.ret21 : null;
-      m.rs63 = (secM && secM.ret63 != null && m.ret63 != null) ? m.ret63 - secM.ret63 : null;
-      m.rsSpy21 = (spy && m.ret21 != null) ? m.ret21 - nRet(spy, 21) : null;
-      stocks.push(m);
-    }
+/* One stock's metrics (stockMetrics) + its universe entry. `ext` marks the
+   extended universe (US stocks outside the S&P 500 / Nasdaq-100). */
+function describeStock(m, sec, { t, n, ind, ndx, sp, mc }, ext = false) {
+  m.t = t; m.n = n; m.sector = sec;
+  m.ind = ind || "";      // industry label (GICS Sub-Industry / ICB Subsector / Nasdaq industry)
+  m.mc = mc > 0 ? mc : null; // market cap, $ millions (null when unknown, e.g. live-fetched tickers)
+  m.cap = capTier(mc);    // "mega" | "large" | "mid" | "small" | null
+  m.ndx = !!ndx;          // in the Nasdaq-100
+  m.sp = !ext && sp !== false; // in the S&P 500
+  m.ext = !!ext;
+  return m;
+}
+
+/* Turn described per-stock metrics into the full model: relative strength vs
+   own sector, percentile-ranked composite score 0–100, flags, breadth.
+   Percentiles and breadth come from the base universe only (S&P 500 +
+   Nasdaq-100); extended stocks are scored against those same percentiles, so
+   adding them never moves an index member's score. Runs in the browser on the
+   precomputed metrics in screen.json, and in Node on raw bars via buildModel. */
+function assembleModel(stocks, etfSeries) {
+  const spy = etfSeries.SPY;
+  const { sectors, secList } = buildSectors([...new Set(stocks.map(s => s.sector))], etfSeries);
+  const spy21 = spy ? nRet(spy, 21) : null;
+  for (const m of stocks) {
+    const secM = sectors[m.sector];
+    m.rs21 = (secM && secM.ret21 != null && m.ret21 != null) ? m.ret21 - secM.ret21 : null;
+    m.rs63 = (secM && secM.ret63 != null && m.ret63 != null) ? m.ret63 - secM.ret63 : null;
+    m.rsSpy21 = (spy && m.ret21 != null) ? m.ret21 - spy21 : null;
   }
 
   // percentile-rank cross-sectional metrics, then weighted composite
+  const base = stocks.filter(s => !s.ext);
   const dims = ["rs63", "rs21", "obvT", "prox52", "volX"];
   const sorted = {};
-  for (const d of dims) sorted[d] = stocks.map(s => s[d]).filter(v => v != null).sort((a, b) => a - b);
+  for (const d of dims) sorted[d] = base.map(s => s[d]).filter(v => v != null).sort((a, b) => a - b);
   for (const s of stocks) {
     const w = SCORE_WEIGHTS;
     s.score = 100 * (
@@ -272,20 +285,37 @@ function buildModel(stockSeries, universe, etfSeries, opts = {}) {
   }
   stocks.sort((a, b) => b.score - a.score);
 
-  // breadth across the universe
-  const n = stocks.length || 1;
+  // breadth across the base universe
+  const n = base.length || 1;
   const breadth = {
-    n: stocks.length,
-    pctAbove20: stocks.filter(s => s.aboveS20).length / n,
-    pctAbove50: stocks.filter(s => s.aboveS50).length / n,
-    advancers: stocks.filter(s => s.chg1d > 0).length / n,
-    near52: stocks.filter(s => s.prox52 >= 0.95).length / n,
-    medRet21: (() => { const r = stocks.map(s => s.ret21).filter(v => v != null).sort((a, b) => a - b); return r.length ? r[Math.floor(r.length / 2)] : null; })(),
+    n: base.length,
+    pctAbove20: base.filter(s => s.aboveS20).length / n,
+    pctAbove50: base.filter(s => s.aboveS50).length / n,
+    advancers: base.filter(s => s.chg1d > 0).length / n,
+    near52: base.filter(s => s.prox52 >= 0.95).length / n,
+    medRet21: (() => { const r = base.map(s => s.ret21).filter(v => v != null).sort((a, b) => a - b); return r.length ? r[Math.floor(r.length / 2)] : null; })(),
   };
 
   return { stocks, sectors, secList, breadth };
 }
 
+/* Build the full model from raw bars. opts.ext = { universe, series } adds the
+   extended universe (same sector → list shape as `universe`). */
+function buildModel(stockSeries, universe, etfSeries, opts = {}) {
+  const stocks = [];
+  const add = (uni, series, ext) => {
+    for (const [sec, list] of Object.entries(uni)) {
+      for (const entry of list) {
+        const m = stockMetrics(series[entry.t]);
+        if (m) stocks.push(describeStock(m, sec, entry, ext));
+      }
+    }
+  };
+  add(universe, stockSeries, false);
+  if (opts.ext) add(opts.ext.universe, opts.ext.series, true);
+  return assembleModel(stocks, etfSeries);
+}
+
 if (typeof module !== "undefined") {
-  module.exports = { smaLast, nRet, mfi, obvTrend, dollarFlow, atr, volSurge, stockMetrics, rrgPoint, sectorFlows, pctRank, buildModel, SCORE_WEIGHTS, marketSession, parsePreFromChart, CAP_TIERS, capTier };
+  module.exports = { smaLast, nRet, mfi, obvTrend, dollarFlow, atr, volSurge, stockMetrics, rrgPoint, sectorFlows, pctRank, buildSectors, describeStock, assembleModel, buildModel, SCORE_WEIGHTS, marketSession, parsePreFromChart, CAP_TIERS, capTier };
 }

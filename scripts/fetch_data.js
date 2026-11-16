@@ -38,10 +38,20 @@ function loadUniverse(root) {
   return STOCK_UNIVERSE;
 }
 
+// Tickers of open single-stock forward tests (forward.json).
+function trackedTickers(root) {
+  try {
+    const f = JSON.parse(fs.readFileSync(path.join(root, "forward.json"), "utf8"));
+    return [...new Set((f.positions || []).filter(p => p.t && p.status === "open").map(p => p.t))];
+  } catch (e) { return []; }
+}
+
 const ROOT = path.join(__dirname, "..");
 const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36";
 
-async function fetchTicker(t, withHL = false, attempt = 1) {
+// opt.maxMove: largest believable one-day move (default 35% for ETFs, 60% for stocks);
+// opt.attempts: tries before giving up (default 4).
+async function fetchTicker(t, withHL = false, attempt = 1, opt = {}) {
   const host = attempt % 2 ? "query1" : "query2"; // alternate hosts on retry
   const url = `https://${host}.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(t)}?range=1y&interval=1d`;
   try {
@@ -72,7 +82,7 @@ async function fetchTicker(t, withHL = false, attempt = 1) {
     // VIX legitimately spikes >35%/day, and low short-term yields (^IRX) move hugely in % terms.
     // Single stocks can gap >35% on earnings, so they get a looser 60% threshold.
     if (!t.includes("-USD") && !t.startsWith("^")) {
-      const maxMove = withHL ? 0.60 : 0.35;
+      const maxMove = opt.maxMove || (withHL ? 0.60 : 0.35);
       for (let i = 1; i < rows.length; i++) {
         const chg = rows[i][3] / rows[i - 1][3] - 1;
         if (Math.abs(chg) > maxMove) throw new Error(`suspect bar: ${(chg * 100).toFixed(1)}% on ${new Date(rows[i][0]).toISOString().slice(0, 10)}`);
@@ -82,23 +92,23 @@ async function fetchTicker(t, withHL = false, attempt = 1) {
     if (Date.now() - rows[rows.length - 1][0] > 7 * 86400000) throw new Error("stale: last bar " + new Date(rows[rows.length - 1][0]).toISOString().slice(0, 10));
     return rows;
   } catch (e) {
-    if (attempt < 4) {
+    if (attempt < (opt.attempts || 4)) {
       await new Promise(r => setTimeout(r, 2000 * attempt));
-      return fetchTicker(t, withHL, attempt + 1);
+      return fetchTicker(t, withHL, attempt + 1, opt);
     }
     console.error(`FAIL ${t}: ${e.message}`);
     return null;
   }
 }
 
-async function fetchSet(tickers, withHL, workers = 3) {
+async function fetchSet(tickers, withHL, workers = 3, opt = {}) {
   const series = {};
   let idx = 0, ok = 0;
   async function worker() {
     while (idx < tickers.length) {
       const t = tickers[idx++];
-      const rows = await fetchTicker(t, withHL);
-      if (rows) { series[t] = rows; ok++; console.log(`OK   ${t}: ${rows.length} bars, last close ${rows[rows.length - 1][1]}`); }
+      const rows = await fetchTicker(t, withHL, 1, opt);
+      if (rows) { series[t] = rows; ok++; if (!opt.quiet) console.log(`OK   ${t}: ${rows.length} bars, last close ${rows[rows.length - 1][1]}`); }
       await new Promise(r => setTimeout(r, 250)); // be polite
     }
   }
@@ -110,7 +120,9 @@ async function fetchSet(tickers, withHL, workers = 3) {
    already has the same last bar day as SPY and is <20h old (the screener's
    metrics are daily anyway, and this keeps repo history from ballooning). */
 async function updateStocks(etfSeries) {
-  const stockTickers = [...new Set(Object.values(loadUniverse(ROOT)).flatMap(l => l.map(s => s.t)))];
+  // the universe, plus anything being forward-tested (so forward.html has its bars
+  // even when the pick came from the extended universe or a live-fetched ticker)
+  const stockTickers = [...new Set([...Object.values(loadUniverse(ROOT)).flatMap(l => l.map(s => s.t)), ...trackedTickers(ROOT)])];
   try {
     const prev = JSON.parse(fs.readFileSync(path.join(ROOT, "stocks.json"), "utf8"));
     const ageH = (Date.now() - Date.parse(prev.updated)) / 36e5;
@@ -143,7 +155,9 @@ async function updateStocks(etfSeries) {
   }
 }
 
-(async function main() {
+module.exports = { fetchSet, loadUniverse, trackedTickers };
+
+if (require.main === module) (async function main() {
   const { series, ok } = await fetchSet(TICKERS, false);
 
   if (ok < TICKERS.length * 0.7) {
